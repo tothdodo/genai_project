@@ -1,0 +1,16 @@
+name: genai-project
+
+services:
+  frontend:
+    container_name: nextjs-frontend
+    build:
+      context: ./genai-project-frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    networks:
+      - genai-network
+
+networks:
+  genai-network:
+    driver: bridge
