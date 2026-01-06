@@ -1,0 +1,12 @@
+FROM python:3.12-slim
+
+COPY src/summary-generation-worker /app
+#COPY src/schemas /app/schemas
+#COPY src/util /app/util
+#COPY src/messaging /app/messaging
+
+RUN pip install --no-cache-dir -r app/requirements.txt
+
+WORKDIR /app
+
+CMD ["python", "summary_generation_worker.py"]

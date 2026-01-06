@@ -50,6 +50,83 @@ services:
       - genai-network
     restart: "no"
 
+  flashcard-generation-worker:
+    image: flashcard-generation-genai-worker
+    build:
+      context: ./genai-project-worker
+      dockerfile: Dockerfile-flashcard-generation-worker
+    container_name: flashcard-generation-worker
+    depends_on:
+      minio:
+        condition: service_started
+        restart: true
+#      rabbitmq:
+#        condition: service_started
+#        restart: true
+#      postgres:
+#        condition: service_started
+#        restart: true
+    networks:
+      - genai-network
+
+  summary-generation-worker:
+    image: summary-generation-genai-worker
+    build:
+      context: ./genai-project-worker
+      dockerfile: Dockerfile-summary-generation-worker
+    container_name: summary-generation-worker
+    depends_on:
+      minio:
+        condition: service_started
+        restart: true
+    #      rabbitmq:
+    #        condition: service_started
+    #        restart: true
+    #      postgres:
+    #        condition: service_started
+    #        restart: true
+    networks:
+      - genai-network
+
+  text-extraction-worker:
+    image: text-extraction-genai-worker
+    build:
+      context: ./genai-project-worker
+      dockerfile: Dockerfile-text-extraction-worker
+    container_name: text-extraction-worker
+    depends_on:
+      minio:
+        condition: service_started
+        restart: true
+    #      rabbitmq:
+    #        condition: service_started
+    #        restart: true
+    #      postgres:
+    #        condition: service_started
+    #        restart: true
+    networks:
+      - genai-network
+
+  aggregation-worker:
+    image: aggregation-genai-worker
+    build:
+      context: ./genai-project-worker
+      dockerfile: Dockerfile-aggregation-worker
+    container_name: aggregation-worker
+    depends_on:
+      minio:
+        condition: service_started
+        restart: true
+    #      rabbitmq:
+    #        condition: service_started
+    #        restart: true
+    #      postgres:
+    #        condition: service_started
+    #        restart: true
+    networks:
+      - genai-network
+
+
 networks:
   genai-network:
     driver: bridge
