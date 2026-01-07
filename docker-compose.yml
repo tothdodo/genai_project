@@ -126,6 +126,64 @@ services:
     networks:
       - genai-network
 
+  postgres:
+    image: postgres:16-alpine
+    container_name: genai-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: genai_user
+      POSTGRES_PASSWORD: genai_password
+      POSTGRES_DB: genai_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+    networks:
+      - genai-network
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U genai_user -d genai_db" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: genai-rabbitmq
+    restart: unless-stopped
+    ports:
+      - "5672:5672"   # RabbitMQ port
+      - "15672:15672" # Management UI
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    networks:
+      - genai-network
+    healthcheck:
+      test: [ "CMD", "rabbitmq-diagnostics", "-q", "ping" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    container_name: spring-backend
+    build:
+      context: ./genai-project-backend
+      dockerfile: genai-project-backend/backend/Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/genai_db
+      - SPRING_DATASOURCE_USERNAME=genai_user
+      - SPRING_DATASOURCE_PASSWORD=genai_password
+      - SPRING_RABBITMQ_HOST=rabbitmq
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - genai-network
+
 
 networks:
   genai-network:
