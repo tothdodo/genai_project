@@ -1,0 +1,169 @@
+{
+  "vhosts": [
+    {
+      "name": "/"
+    }
+  ],
+  "users": [
+    {
+      "name": "admin",
+      "password": "admin",
+      "tags": "administrator"
+    }
+  ],
+  "permissions": [
+    {
+      "user": "admin",
+      "vhost": "/",
+      "configure": ".*",
+      "write": ".*",
+      "read": ".*"
+    }
+  ],
+  "exchanges": [
+    {
+      "name": "worker-job",
+      "vhost": "/",
+      "type": "direct",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    },
+    {
+      "name": "worker-results",
+      "vhost": "/",
+      "type": "direct",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    }
+  ],
+  "queues": [
+    {
+      "name": "worker.aggregation.job",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {}
+    },
+    {
+      "name": "worker.aggregation.result",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {}
+    },
+    {
+      "name": "worker.flashcard.generation.job",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {}
+    },
+    {
+      "name": "worker.flashcard.generation.result",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {}
+    },
+    {
+      "name": "worker.summary.generation.job",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {}
+    },
+    {
+      "name": "worker.summary.generation.result",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {}
+    },
+    {
+      "name": "worker.text.extraction.job",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {}
+    },
+    {
+      "name": "worker.text.extraction.result",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {}
+    }
+  ],
+  "bindings": [
+    {
+      "source": "worker-job",
+      "vhost": "/",
+      "destination": "worker.aggregation.job",
+      "destination_type": "queue",
+      "routing_key": "worker.aggregation.job.start",
+      "arguments": {}
+    },
+    {
+      "source": "worker-results",
+      "vhost": "/",
+      "destination": "worker.aggregation.result",
+      "destination_type": "queue",
+      "routing_key": "worker.aggregation.result",
+      "arguments": {}
+    },
+    {
+      "source": "worker-job",
+      "vhost": "/",
+      "destination": "worker.flashcard.generation.job",
+      "destination_type": "queue",
+      "routing_key": "worker.flashcard.generation.job.start",
+      "arguments": {}
+    },
+    {
+      "source": "worker-results",
+      "vhost": "/",
+      "destination": "worker.flashcard.generation.result",
+      "destination_type": "queue",
+      "routing_key": "worker.flashcard.generation.result",
+      "arguments": {}
+    },
+    {
+      "source": "worker-job",
+      "vhost": "/",
+      "destination": "worker.summary.generation.job",
+      "destination_type": "queue",
+      "routing_key": "worker.summary.generation.job.start",
+      "arguments": {}
+    },
+    {
+      "source": "worker-results",
+      "vhost": "/",
+      "destination": "worker.summary.generation.result",
+      "destination_type": "queue",
+      "routing_key": "worker.summary.generation.result",
+      "arguments": {}
+    },
+    {
+      "source": "worker-job",
+      "vhost": "/",
+      "destination": "worker.text.extraction.job",
+      "destination_type": "queue",
+      "routing_key": "worker.text.extraction.job.start",
+      "arguments": {}
+    },
+    {
+      "source": "worker-results",
+      "vhost": "/",
+      "destination": "worker.text.extraction.result",
+      "destination_type": "queue",
+      "routing_key": "worker.text.extraction.result",
+      "arguments": {}
+    }
+  ],
+  "policies": [],
+  "parameters": []
+}
