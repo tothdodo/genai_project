@@ -45,7 +45,9 @@ export async function uploadToPresignedUrl(
     return new Promise((resolve, reject) => {
         const xhr = new XMLHttpRequest();
 
-        xhr.open(method, url);
+        const parsed = new URL(url);
+        const proxiedUrl = `${process.env.NEXT_PUBLIC_MINIO_UPLOAD}${parsed.pathname}${parsed.search}`;
+        xhr.open(method, proxiedUrl);
 
         // Set the content type
         xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
