@@ -46,7 +46,7 @@ def mk_summary():
     return "Summary"
 
 def process_req(ch, method, properties, body):
-    publisher = ResultPublisher(ch)
+    #publisher = ResultPublisher(ch)
     start_time = time.time()
     request = json.loads(body)
     logging.info(start_time)

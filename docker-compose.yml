@@ -89,12 +89,12 @@ services:
       minio:
         condition: service_started
         restart: true
-#      rabbitmq:
-#        condition: service_started
-#        restart: true
-#      postgres:
-#        condition: service_started
-#        restart: true
+      rabbitmq:
+        condition: service_started
+        restart: true
+      postgres:
+        condition: service_started
+        restart: true
     networks:
       - genai-network
 
@@ -108,12 +108,12 @@ services:
       minio:
         condition: service_started
         restart: true
-    #      rabbitmq:
-    #        condition: service_started
-    #        restart: true
-    #      postgres:
-    #        condition: service_started
-    #        restart: true
+      rabbitmq:
+        condition: service_started
+        restart: true
+      postgres:
+        condition: service_started
+        restart: true
     networks:
       - genai-network
 
@@ -127,12 +127,12 @@ services:
       minio:
         condition: service_started
         restart: true
-    #      rabbitmq:
-    #        condition: service_started
-    #        restart: true
-    #      postgres:
-    #        condition: service_started
-    #        restart: true
+      rabbitmq:
+        condition: service_started
+        restart: true
+      postgres:
+        condition: service_started
+        restart: true
     networks:
       - genai-network
 
@@ -146,12 +146,12 @@ services:
       minio:
         condition: service_started
         restart: true
-    #      rabbitmq:
-    #        condition: service_started
-    #        restart: true
-    #      postgres:
-    #        condition: service_started
-    #        restart: true
+      rabbitmq:
+        condition: service_started
+        restart: true
+      postgres:
+        condition: service_started
+        restart: true
     networks:
       - genai-network
 
