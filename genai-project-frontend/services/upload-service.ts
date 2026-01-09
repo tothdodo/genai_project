@@ -46,7 +46,7 @@ export async function uploadToPresignedUrl(
         const xhr = new XMLHttpRequest();
 
         const parsed = new URL(url);
-        const proxiedUrl = `${process.env.NEXT_PUBLIC_MINIO_UPLOAD}${parsed.pathname}${parsed.search}`;
+        const proxiedUrl = `${process.env.NEXT_PUBLIC_FRONTEND_URI}/minio-upload${parsed.pathname}${parsed.search}`;
         xhr.open(method, proxiedUrl);
 
         // Set the content type
