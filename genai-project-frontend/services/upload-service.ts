@@ -141,5 +141,5 @@ export async function uploadFileUsingPresign(
     await uploadToPresignedUrl(file, info.presignedURL, "PUT", onProgress);
 
     // Optional: Notify backend completion after successful upload
-    //await notifyUploadComplete(file, hash);
+    await notifyUploadComplete(file, hash);
 }
