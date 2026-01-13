@@ -6,6 +6,8 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.Setter;
 
+import java.time.Instant;
+
 @Entity
 @Table(name = "category_items")
 @Getter
@@ -15,16 +17,29 @@ import lombok.Setter;
 public class CategoryItem {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    private Integer id;
 
-    @Column(nullable = false, unique = true)
-    private String filename;
+    @Column(length = 32, nullable = false)
+    private String name;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "category_id")
+    @Column(columnDefinition = "TEXT")
+    private String description;
+
+    @Column(name = "created_at", nullable = false)
+    private Instant createdAt;
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "category_id", nullable = false)
     private Category category;
 
     public CategoryItem() {
 
+    }
+
+    public CategoryItem(String name, String description, Category category) {
+        this.name = name;
+        this.description = description;
+        this.category = category;
+        this.createdAt = Instant.now();
     }
 }

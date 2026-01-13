@@ -1,6 +1,6 @@
 import { BACKEND_URI, DEFAULT_BUCKET_PATH, HEADERS } from "@/globals"
-import { FileInfo } from "@/types/FileInfo"
-import { UploadFile } from "@/types/UploadFile"
+import { FileInfo } from "@/types/fileInfo"
+import { UploadFile } from "@/types/uploadFile"
 
 /* ================================
    Presign request
@@ -19,7 +19,6 @@ export async function getPresignedUploadUrl(
         headers: HEADERS,
         body: JSON.stringify(payload),
     };
-    console.log(payload)
 
     const res = await fetch(
         `${BACKEND_URI}${DEFAULT_BUCKET_PATH}/upload`,

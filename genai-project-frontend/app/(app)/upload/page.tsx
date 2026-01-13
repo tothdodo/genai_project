@@ -9,9 +9,8 @@ import {
     CardHeader,
     CardTitle,
 } from "@/components/ui/card"
-import { uploadFileUsingPresign } from "@/services/upload-service"
+import { uploadFileUsingPresign } from "@/services/upload.service"
 
-// A simple Shadcn-styled Circular Progress component
 function CircularProgress({ value }: { value: number }) {
     const radius = 36;
     const circumference = 2 * Math.PI * radius;
@@ -20,7 +19,6 @@ function CircularProgress({ value }: { value: number }) {
     return (
         <div className="relative flex items-center justify-center">
             <svg className="w-20 h-20 transform -rotate-90">
-                {/* Background Circle */}
                 <circle
                     className="text-muted-foreground/20"
                     strokeWidth="8"
@@ -30,7 +28,6 @@ function CircularProgress({ value }: { value: number }) {
                     cx="40"
                     cy="40"
                 />
-                {/* Progress Circle */}
                 <circle
                     className="text-primary transition-all duration-300 ease-in-out"
                     strokeWidth="8"
@@ -101,7 +98,6 @@ export default function UploadPage() {
                         onChange={handleFileChange}
                     />
 
-                    {/* Show Progress Circle when uploading */}
                     {isUploading ? (
                         <CircularProgress value={progress} />
                     ) : (
