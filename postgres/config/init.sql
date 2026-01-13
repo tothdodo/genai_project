@@ -17,16 +17,18 @@ CREATE TABLE IF NOT EXISTS urls (
 
 CREATE TABLE IF NOT EXISTS categories (
     id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
-    name VARCHAR(32),
+    name VARCHAR(32) NOT NULL,
+    description TEXT,
     created_at TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS category_items (
     id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
-    name VARCHAR(32),
+    name VARCHAR(32) NOT NULL,
+    description TEXT,
     created_at TIMESTAMP,
     category_id INTEGER,
-    CONSTRAINT fk_category_id FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL
+    CONSTRAINT fk_category_id FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE CASCADE 
 );
 
 CREATE TABLE IF NOT EXISTS files (

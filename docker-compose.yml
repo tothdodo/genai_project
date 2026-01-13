@@ -71,10 +71,7 @@ services:
       minio:
         condition: service_healthy
     entrypoint: >
-      /bin/sh -c "
-      mc alias set myminio http://minio:9000 admin genaiWS25 &&
-      mc mb myminio/basebucket || true
-      "
+      /bin/sh -c " mc alias set myminio http://minio:9000 admin genaiWS25 && mc mb myminio/basebucket || true "
     networks:
       - genai-network
     restart: "no"
@@ -165,7 +162,7 @@ services:
       POSTGRES_USER: admin
       POSTGRES_PASSWORD: admin
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+      test: [ "CMD-SHELL", "pg_isready -U admin" ]
       interval: 5s
       timeout: 5s
       retries: 12
