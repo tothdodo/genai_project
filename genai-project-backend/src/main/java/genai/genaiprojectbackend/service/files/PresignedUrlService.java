@@ -1,6 +1,8 @@
 package genai.genaiprojectbackend.service.files;
 
 import genai.genaiprojectbackend.api.bucket.dtos.FileInfoDto;
+import genai.genaiprojectbackend.model.entities.CategoryItem;
+import genai.genaiprojectbackend.repository.CategoryItemRepository;
 import genai.genaiprojectbackend.service.workers.WorkerStartService;
 import io.minio.GetPresignedObjectUrlArgs;
 import io.minio.MinioAsyncClient;
@@ -40,25 +42,25 @@ public class PresignedUrlService implements IPresignedUrlService {
     protected final MinioAsyncClient minioClient;
     protected final MinioProperties minioProperties;
 
-    //private final FileDao fileDao;
+    // private final FileDao fileDao;
     private final UrlRepository urlRepository;
     private final FileRepository fileRepository;
-    //private final FolderRepository folderRepository;
+    private final CategoryItemRepository categoryItemRepository;
     private final WorkerStartService workerStartService;
     private final UrlMapper urlMapper;
-    //minimum added time to the current time when checking for expiry
+    // minimum added time to the current time when checking for expiry
     private final int minimumAddedTime = 20;
     @Value("${spring.rabbitmq.template.routing-key:metadata_trigger}")
     private String routingKey;
 
-
-    @Scheduled(fixedDelayString = "${minio.defaultRefresh:2000}") //this needs to be less than the url expiry time
-    //default 10 min, always needs to be less than the url validity
+    @Scheduled(fixedDelayString = "${minio.defaultRefresh:2000}") // this needs to be less than the url expiry time
+    // default 10 min, always needs to be less than the url validity
     @Transactional
     public void invalidateUrls() {
         // Try to refresh and recover silently on errors so scheduler keeps running
         urlRepository.getUrlsByExpiresAtBefore(Instant.now()).forEach(url -> {
-            log.info("Deleting expired URL for file: {}", url.getFile() != null ? url.getFile().getFilename() : "unknown");
+            log.info("Deleting expired URL for file: {}",
+                    url.getFile() != null ? url.getFile().getFilename() : "unknown");
             urlRepository.delete(url);
         });
 
@@ -66,7 +68,7 @@ public class PresignedUrlService implements IPresignedUrlService {
 
     @PostConstruct
     public void init() throws MinioException, GeneralSecurityException, IOException {
-        //store a base file if it doesn't already exist
+        // store a base file if it doesn't already exist
         if (IPresignedUrlService.bucketExists(minioClient, minioProperties.getBucket()).join()) {
             // Bucket exists
             log.info("Bucket {} exists and is reachable", minioProperties.getBucket());
@@ -75,10 +77,10 @@ public class PresignedUrlService implements IPresignedUrlService {
         }
     }
 
-
     @Override
     public Optional<FileInfoDto> fetchFileInfo(@NonNull @NotBlank String fileName, String originalFileName) {
-        List<Url> presignedUrls = urlRepository.findByFile_Filename_AndMethod_AndExpiresAtAfter(fileName, Method.GET, Instant.now().plusSeconds(minimumAddedTime));
+        List<Url> presignedUrls = urlRepository.findByFile_Filename_AndMethod_AndExpiresAtAfter(fileName, Method.GET,
+                Instant.now().plusSeconds(minimumAddedTime));
         if (!presignedUrls.isEmpty()) {
             Url url = presignedUrls.get(0);
             FileInfoDto fileInfoDto = urlMapper.urlToFileInfoDto(url);
@@ -89,7 +91,7 @@ public class PresignedUrlService implements IPresignedUrlService {
         if (presignedObjectUrlArgs == null) {
             return Optional.empty();
         }
-        //expiry should be set before fetching url
+        // expiry should be set before fetching url
         Instant expiresAt = Instant.now().plusSeconds(minioProperties.getDefaultExpiryTime());
         Optional<FileInfoDto> fileInfo = getUrl(presignedObjectUrlArgs, fileName, originalFileName);
 
@@ -110,18 +112,18 @@ public class PresignedUrlService implements IPresignedUrlService {
 
             return Optional.of(fileInfoDtoActual);
         } else {
-            //refactor
+            // refactor
             return Optional.empty();
         }
     }
 
     @Override
-    public Optional<FileInfoDto> fetchUploadUrl(String fileName, String originalFileName/*, Long folderId*/) {
+    public Optional<FileInfoDto> fetchUploadUrl(String fileName, String originalFileName, Integer categoryItemId) {
         GetPresignedObjectUrlArgs presignedObjectUrlArgs = getPresignedObjectUrlArgs(fileName, Method.PUT);
         if (presignedObjectUrlArgs == null) {
             return Optional.empty();
         }
-        //check if the file already exists if not return empty
+        // check if the file already exists if not return empty
         if (fileRepository.findFileByFilenameAndUploaded(fileName, true).isPresent()) {
             return Optional.empty();
         }
@@ -131,16 +133,18 @@ public class PresignedUrlService implements IPresignedUrlService {
         Optional<File> fileOpt = fileRepository.findFileByFilenameAndUploaded(fileName, false);
         File file;
         if (fileOpt.isPresent()) {
-            //file already exists but not yet uploaded
-            //check whether there is a valid upload url
-            List<Url> presignedUrls = urlRepository.findByFile_Filename_AndMethod_AndExpiresAtAfter(fileName, Method.PUT, Instant.now());
+            // file already exists but not yet uploaded
+            // check whether there is a valid upload url
+            List<Url> presignedUrls = urlRepository.findByFile_Filename_AndMethod_AndExpiresAtAfter(fileName,
+                    Method.PUT, Instant.now());
             Optional<Url> createdUpload = presignedUrls.stream().findAny();
             if (createdUpload.isPresent()) {
                 FileInfoDto fileInfo;
                 fileInfo = new FileInfoDto(fileOpt.get());
                 fileInfo.setPresignedURL(createdUpload.get().getPresignedURL());
                 fileInfo.setUploaded(false);
-                //fileInfo.setFolderId(fileOpt.get().getFolder() != null ? fileOpt.get().getFolder().getId() : null);
+                // fileInfo.setFolderId(fileOpt.get().getFolder() != null ?
+                // fileOpt.get().getFolder().getId() : null);
                 return Optional.of(fileInfo);
             }
 
@@ -150,15 +154,14 @@ public class PresignedUrlService implements IPresignedUrlService {
             file.setFilename(fileName);
             file.setUploaded(false);
             file.setOriginalFilename(originalFileName);
-            //file.setStatus("UPLOADED");
-//            if (folderId != null) {
-//                Folder folder = folderRepository.findById(folderId).orElse(null);
-//                file.setFolder(folder);
-//                file = fileRepository.save(file);
-//                if (folder != null) folder.addFile(file);
-//            } else {
+            // file.setStatus("UPLOADED");
+            if (categoryItemId != null) {
+                CategoryItem categoryItem = categoryItemRepository.findById(categoryItemId)
+                        .orElseThrow(() -> new IllegalArgumentException(
+                                "Category not found with id: " + categoryItemId));
+                file.setCategoryItem(categoryItem);
+            }
             file = fileRepository.save(file);
-            //}
         }
 
         Optional<FileInfoDto> fOpt = getUrl(presignedObjectUrlArgs, fileName, originalFileName);
@@ -170,7 +173,8 @@ public class PresignedUrlService implements IPresignedUrlService {
             fileInfo.setOriginalFileName(originalFileName);
             fileInfo = fOpt.get();
             fileInfo.setUrlExpiresAt(expiresAt);
-            //fileInfo.setFolderId(file.getFolder() != null ? file.getFolder().getId() : null);
+            // fileInfo.setFolderId(file.getFolder() != null ? file.getFolder().getId() :
+            // null);
             url.setFile(file);
             url.setPresignedURL(fOpt.get().getPresignedURL());
             url.setMethod(Method.PUT);
@@ -196,9 +200,10 @@ public class PresignedUrlService implements IPresignedUrlService {
         if (presignedObjectUrlArgs == null) {
             return Optional.empty();
         }
-        //expiry should be set before fetching url
+        // expiry should be set before fetching url
         Instant expiresAt = Instant.now().plusSeconds(minioProperties.getDefaultExpiryTime());
-        Optional<FileInfoDto> fileInfoOpt = getUrl(presignedObjectUrlArgs, body.getFileName(), body.getOriginalFileName());
+        Optional<FileInfoDto> fileInfoOpt = getUrl(presignedObjectUrlArgs, body.getFileName(),
+                body.getOriginalFileName());
         if (fileInfoOpt.isEmpty()) {
             return Optional.empty();
         }
@@ -209,6 +214,7 @@ public class PresignedUrlService implements IPresignedUrlService {
 
         file.setUploaded(true);
         file.setUploadedAt(Instant.now());
+        //file.setUrl(fileInfoOpt.get().getPresignedURL());
         file = fileRepository.save(file);
         FileInfoDto dto = new FileInfoDto(file);
         urlRepository.deleteByFileIdAndMethod(file.getId(), Method.PUT);
@@ -217,7 +223,7 @@ public class PresignedUrlService implements IPresignedUrlService {
         dto.setPresignedURL(fileInfoOpt.get().getPresignedURL());
         dto.setUrlExpiresAt(expiresAt);
 
-        //TODO change to real jobId when job status management is implemented
+        // TODO change to real jobId when job status management is implemented
         sendFinishMessage("1234", dto.getPresignedURL());
 
         return Optional.of(dto);
@@ -239,17 +245,18 @@ public class PresignedUrlService implements IPresignedUrlService {
         }
     }
 
-
-    private Optional<FileInfoDto> getUrl(GetPresignedObjectUrlArgs presignedObjectUrlArgs, String fileName, String originalFileName) {
+    private Optional<FileInfoDto> getUrl(GetPresignedObjectUrlArgs presignedObjectUrlArgs, String fileName,
+            String originalFileName) {
         try {
             String url = minioClient.getPresignedObjectUrl(presignedObjectUrlArgs);
-            return Optional.of(FileInfoDto.builder().fileName(fileName).presignedURL(url).originalFileName(originalFileName).build());
+            return Optional.of(FileInfoDto.builder().fileName(fileName).presignedURL(url)
+                    .originalFileName(originalFileName).build());
         } catch (MinioException | GeneralSecurityException | IOException e) {
-            log.info("Could not fetch presigned {} URL for file: {}", presignedObjectUrlArgs.method().toString(), fileName, e);
+            log.info("Could not fetch presigned {} URL for file: {}", presignedObjectUrlArgs.method().toString(),
+                    fileName, e);
             return Optional.empty();
         }
     }
-
 
     private StatObjectArgs getStatObjectArgs(String fileName) {
         return StatObjectArgs.builder()
@@ -268,4 +275,3 @@ public class PresignedUrlService implements IPresignedUrlService {
     }
 
 }
-

@@ -8,11 +8,11 @@ import genai.genaiprojectbackend.api.exceptions.BadRequestException;
 import genai.genaiprojectbackend.api.exceptions.NotFoundException;
 import genai.genaiprojectbackend.model.entities.Category;
 import genai.genaiprojectbackend.model.entities.CategoryItem;
+import genai.genaiprojectbackend.model.entities.File;
 import genai.genaiprojectbackend.repository.CategoryItemRepository;
 import genai.genaiprojectbackend.repository.CategoryRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
 import java.util.List;
 
 @Service
@@ -56,7 +56,7 @@ public class CategoryItemService implements ICategoryItemService {
     @Override
     @Transactional(readOnly = true)
     public CategoryItemDetailsDTO getById(Integer id) {
-        CategoryItem item = itemRepository.findByIdWithCategory(id)
+        CategoryItem item = itemRepository.findByIdWithCategoryAndFiles(id)
                 .orElseThrow(() -> new NotFoundException(
                         "Category item not found with id: " + id
                 ));
@@ -98,12 +98,18 @@ public class CategoryItemService implements ICategoryItemService {
                 category.getName()
         );
 
+        List<String> filenames = item.getFiles().stream()
+                .map(File::getOriginalFilename)
+                .toList();
+
         return new CategoryItemDetailsDTO(
                 item.getId(),
                 item.getName(),
                 item.getDescription(),
                 item.getCreatedAt(),
-                categoryHeader
+                item.getStatus(),
+                categoryHeader,
+                filenames
         );
     }
 }

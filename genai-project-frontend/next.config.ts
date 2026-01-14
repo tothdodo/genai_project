@@ -6,7 +6,7 @@ const nextConfig: NextConfig = {
   async rewrites() {
     return [
       {
-        source: '/minio-upload/:path*',
+        source: '/minio/:path*',
         destination: 'http://minio:9000/:path*'
       }
     ];

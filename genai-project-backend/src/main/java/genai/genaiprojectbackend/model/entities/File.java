@@ -51,9 +51,6 @@ public class File {
     @CreationTimestamp //TODO change this to the actual upload time when implementing uploadFinished
     private Instant uploadedAt;
 
-//    @Column(name = "status")
-//    private String status;
-
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "category_item_id")
     private CategoryItem categoryItem;

@@ -4,6 +4,7 @@ export type CategoryItemDetails = {
     description: string;
     createdAt: string;
     category: CategoryHeader;
+    filenames: string[];
 };
 
 export type CategoryHeader = {

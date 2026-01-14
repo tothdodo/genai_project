@@ -7,6 +7,7 @@ import lombok.Getter;
 import lombok.Setter;
 
 import java.time.Instant;
+import java.util.List;
 
 @Entity
 @Table(name = "category_items")
@@ -31,6 +32,12 @@ public class CategoryItem {
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "category_id", nullable = false)
     private Category category;
+
+    @Column(name = "status")
+    private String status;
+
+    @OneToMany(mappedBy = "categoryItem")
+    private List<File> files;
 
     public CategoryItem() {
 

@@ -1,4 +1,4 @@
-import { BACKEND_URI, DEFAULT_BUCKET_PATH, HEADERS } from "@/globals"
+import { CLIENT_BACKEND_URI, DEFAULT_BUCKET_PATH, HEADERS } from "@/globals"
 import { FileInfo } from "@/types/fileInfo"
 import { UploadFile } from "@/types/uploadFile"
 
@@ -7,11 +7,13 @@ import { UploadFile } from "@/types/uploadFile"
 ================================ */
 export async function getPresignedUploadUrl(
     file: File,
-    hash: string
+    hash: string,
+    categoryItemId: number
 ): Promise<FileInfo> {
     const payload: FileInfo = {
         fileName: `${hash}_${file.name}`,
         originalFileName: file.name,
+        categoryItemId: categoryItemId
     }
 
     const params = {
@@ -20,8 +22,11 @@ export async function getPresignedUploadUrl(
         body: JSON.stringify(payload),
     };
 
+    const url = `${CLIENT_BACKEND_URI}${DEFAULT_BUCKET_PATH}/upload`;
+    console.log("Calling: ", url);
+
     const res = await fetch(
-        `${BACKEND_URI}${DEFAULT_BUCKET_PATH}/upload`,
+        url,
         params
     )
 
@@ -45,7 +50,8 @@ export async function uploadToPresignedUrl(
         const xhr = new XMLHttpRequest();
 
         const parsed = new URL(url);
-        const proxiedUrl = `${process.env.NEXT_PUBLIC_FRONTEND_URI}/minio-upload${parsed.pathname}${parsed.search}`;
+        const proxiedUrl = `${process.env.NEXT_PUBLIC_FRONTEND_URI}/minio${parsed.pathname}${parsed.search}`;
+        console.log("Calling: ", proxiedUrl);
         xhr.open(method, proxiedUrl);
 
         // Set the content type
@@ -80,15 +86,19 @@ export async function uploadToPresignedUrl(
 ================================ */
 export async function notifyUploadComplete(
     file: File,
-    hash: string
+    hash: string,
+    categoryItemId: number
 ): Promise<FileInfo> {
     const payload: FileInfo = {
         fileName: `${hash}_${file.name}`,
         originalFileName: file.name,
+        categoryItemId: categoryItemId
     }
+    const url = `${CLIENT_BACKEND_URI}${DEFAULT_BUCKET_PATH}/upload`;
+    console.log("Calling: ", url);
 
     const res = await fetch(
-        `${BACKEND_URI}${DEFAULT_BUCKET_PATH}/upload`,
+        url,
         {
             method: "PUT",
             headers: HEADERS,
@@ -127,12 +137,13 @@ export async function hashFile(file: File): Promise<string> {
 export async function uploadFileUsingPresign(
     file: File,
     uploadFile: UploadFile,
+    categoryItemId: number,
     onProgress?: (percent: number) => void
 ): Promise<void> {
     const hash = await hashFile(file);
     uploadFile.hash = hash;
 
-    const info = await getPresignedUploadUrl(file, hash);
+    const info = await getPresignedUploadUrl(file, hash, categoryItemId);
 
     if (!info.presignedURL) {
         throw new Error("Presign request failed: missing presignedURL");
@@ -142,5 +153,5 @@ export async function uploadFileUsingPresign(
     await uploadToPresignedUrl(file, info.presignedURL, "PUT", onProgress);
 
     // Optional: Notify backend completion after successful upload
-    await notifyUploadComplete(file, hash);
+    await notifyUploadComplete(file, hash, categoryItemId);
 }

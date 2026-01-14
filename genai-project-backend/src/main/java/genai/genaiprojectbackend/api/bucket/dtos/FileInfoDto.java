@@ -1,5 +1,6 @@
 package genai.genaiprojectbackend.api.bucket.dtos;
 
+import genai.genaiprojectbackend.api.categoryitem.dtos.CategoryHeaderDTO;
 import genai.genaiprojectbackend.model.entities.File;
 import genai.genaiprojectbackend.model.entities.Url;
 import genai.genaiprojectbackend.validator.FileNameValid;
@@ -29,6 +30,9 @@ public class FileInfoDto {
 
     @JsonProperty("urlExpiresAt")
     private Instant urlExpiresAt;
+
+    @JsonProperty("categoryItemId")
+    private Integer categoryItemId;
 
     public FileInfoDto() {
     }
@@ -72,12 +76,13 @@ public class FileInfoDto {
         this.originalFileName = originalFileName;
     }
 
-    FileInfoDto(String fileName, String originalFileName, String presignedURL, Boolean uploaded, Instant urlExpiresAt, Long folderId) {
+    FileInfoDto(String fileName, String originalFileName, String presignedURL, Boolean uploaded, Instant urlExpiresAt, Integer categoryItemId) {
         this.fileName = fileName;
         this.presignedURL = presignedURL;
         this.uploaded = uploaded;
         this.urlExpiresAt = urlExpiresAt;
         this.originalFileName = originalFileName;
+        this.categoryItemId = categoryItemId;
     }
 }
 

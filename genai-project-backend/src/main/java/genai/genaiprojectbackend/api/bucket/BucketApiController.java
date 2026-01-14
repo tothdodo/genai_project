@@ -54,7 +54,7 @@ public class BucketApiController implements IBucketApi {
             @RequestBody FileInfoDto body) {
         String accept = request.getHeader("Accept");
         if (accept != null && accept.contains("application/json")) {
-            Optional<FileInfoDto> file = presignedUrlService.fetchUploadUrl(body.getFileName(), body.getOriginalFileName()/*, body.getFolderId()*/);
+            Optional<FileInfoDto> file = presignedUrlService.fetchUploadUrl(body.getFileName(), body.getOriginalFileName(), body.getCategoryItemId());
             return file.map(fileInfo -> new ResponseEntity<>(fileInfo, HttpStatus.OK))
                     .orElseGet(() -> new ResponseEntity<FileInfoDto>(new FileInfoDto(), HttpStatus.CONFLICT));
         }

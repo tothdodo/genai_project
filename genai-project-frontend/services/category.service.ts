@@ -1,14 +1,16 @@
-import { BACKEND_URI, DEFAULT_CATEGORY_PATH, HEADERS } from "@/globals"
-import { Category } from "@/types/Category";
+import { CLIENT_BACKEND_URI, SERVER_BACKEND_URI, DEFAULT_CATEGORY_PATH, HEADERS } from "@/globals"
+import { Category } from "@/types/category";
 
 export async function getCategoryById(categoryId: number): Promise<Category> {
     const params = {
         method: "GET",
         headers: HEADERS,
     };
+    const url = `${SERVER_BACKEND_URI}${DEFAULT_CATEGORY_PATH}/${categoryId}`;
+    console.log("Calling: ", url);
 
     const res = await fetch(
-        `${BACKEND_URI}${DEFAULT_CATEGORY_PATH}/${categoryId}`,
+        url,
         params
     )
 
@@ -17,6 +19,7 @@ export async function getCategoryById(categoryId: number): Promise<Category> {
     }
 
     const data: Category = await res.json();
+    console.log(data)
     return data;
 }
 
@@ -25,9 +28,11 @@ export async function getAllCategories(): Promise<Category[]> {
         method: "GET",
         headers: HEADERS,
     };
+    const url = `${CLIENT_BACKEND_URI}${DEFAULT_CATEGORY_PATH}/all`;
+    console.log("Calling: ", url);
 
     const res = await fetch(
-        `${BACKEND_URI}${DEFAULT_CATEGORY_PATH}/all`,
+        url,
         params
     )
 
@@ -40,14 +45,16 @@ export async function getAllCategories(): Promise<Category[]> {
     return data;
 }
 
-export async function addCategory(name: string, description: string = ""): Promise<Category> {
+export async function addCategory(name: string, description: string | null = null): Promise<Category> {
     const params = {
         method: "POST",
         headers: HEADERS,
         body: JSON.stringify({ name, description }),
     };
+    const url = `${CLIENT_BACKEND_URI}${DEFAULT_CATEGORY_PATH}`;
+    console.log("Calling: ", url);
     const res = await fetch(
-        `${BACKEND_URI}${DEFAULT_CATEGORY_PATH}`,
+        url,
         params
     );
     if (!res.ok) {

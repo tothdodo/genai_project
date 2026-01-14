@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Category, CategoryListItem } from "@/types/Category";
+import { Category, CategoryListItem } from "@/types/category";
 import { addCategory } from "@/services/category.service";
 import { Textarea } from "../ui/textarea";
 import { addCategoryItem } from "@/services/categoryItem.service";

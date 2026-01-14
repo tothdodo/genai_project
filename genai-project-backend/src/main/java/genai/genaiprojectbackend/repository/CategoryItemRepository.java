@@ -13,6 +13,9 @@ public interface CategoryItemRepository extends JpaRepository<CategoryItem, Inte
 
     boolean existsByCategoryIdAndName(Integer categoryId, String name);
 
-    @Query("SELECT ci FROM CategoryItem ci JOIN FETCH ci.category WHERE ci.id = :id")
-    Optional<CategoryItem> findByIdWithCategory(@Param("id") Integer id);
+    @Query("SELECT ci FROM CategoryItem ci " +
+            "JOIN FETCH ci.category " +
+            "LEFT JOIN FETCH ci.files f " +
+            "WHERE ci.id = :id")
+    Optional<CategoryItem> findByIdWithCategoryAndFiles(@Param("id") Integer id);
 }

@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS category_items (
     description TEXT,
     created_at TIMESTAMP,
     category_id INTEGER,
+    status VARCHAR(16) DEFAULT 'PENDING' CHECK (status in ('PENDING', 'PROCESSING', 'COMPLETED', 'FAILED')),
     CONSTRAINT fk_category_id FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE CASCADE 
 );
 
@@ -37,7 +38,6 @@ CREATE TABLE IF NOT EXISTS files (
     original_filename TEXT,
     size_bytes BIGINT,
     file_creation_date DATE,
-    --status VARCHAR(32) NOT NULL DEFAULT 'UPLOADED' CHECK (status in ('UPLOADED', 'PROCESSING', 'PROCESSED', 'FAILED')),
     uploaded BOOLEAN DEFAULT FALSE,
     uploaded_at TIMESTAMP,
     category_item_id INTEGER,

@@ -44,10 +44,10 @@ public interface IPresignedUrlService {
      *
      * @param fileName         the name of the file to be uploaded as SHA-256 hash
      * @param originalFileName the original name of the file to be uploaded
-     * @param folderId         of the corresponding folder that we wan't to connect this file to
+     * @param categoryItemId         of the corresponding categoryItemId that we want to connect this file to
      * @return Optional with FileInfoDto if upload URL is generated
      */
-    Optional<FileInfoDto> fetchUploadUrl(String fileName, String originalFileName/*, Long folderId*/);
+    Optional<FileInfoDto> fetchUploadUrl(String fileName, String originalFileName, Integer categoryItemId);
 
     /**
      * Marks the upload as finished for the given file name.

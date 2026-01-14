@@ -1,3 +1,6 @@
+import Flashcards from "@/components/categoryItems/Flashcards";
+import { Card } from "@/components/ui/card";
+import UploadSection from "@/components/upload/UploadSection";
 import { getCategoryItemById } from "@/services/categoryItem.service";
 import { CategoryItemDetails } from "@/types/categoryItem";
 import Link from "next/link";
@@ -14,17 +17,51 @@ export default async function CategoryItemPage(props: { params: Params }) {
 
     if (!categoryItem) return notFound();
 
+    console.log("Category Item Details:", categoryItem);
+
     return (
-        <div>
-            <Link href={`/category/${categoryItem.category.id}`} className="text-sm text-primary underline mb-4 inline-block">
-                &larr; Back to Category
+        <div className="container mx-auto flex flex-col">
+            <Link href={`/category/${categoryItem.category.id}`} className="text-lg text-primary underline inline-block mb-6">
+                {`← ${categoryItem.category.name}`}
             </Link>
-            <h1 className="text-2xl font-bold mb-2">{categoryItem.name}</h1>
-            <p className="text-muted-foreground mb-4">
-                {categoryItem.description
-                    ? `This is the details page for category "${categoryItem.description}"`
-                    : "No description provided."}
-            </p>
+            <div className="flex justify-between">
+                <div className="flex-1 flex flex-col gap-6 mr-6">
+                    <Card className="p-3">
+                        <div>
+                            <h1 className="text-2xl font-semibold tracking-tight">
+                                {categoryItem.name}
+                            </h1>
+                        </div>
+                        <div className="space-y-1">
+                            <p className="text-sm font-medium text-muted-foreground">
+                                Description
+                            </p>
+
+                            <p className="text-sm leading-relaxed text-foreground whitespace-pre-line">
+                                {categoryItem.description ?? "No description provided."}
+                            </p>
+                        </div>
+                    </Card>
+                    <Card className="p-3">
+                        <div>
+                            <h1 className="text-2xl font-semibold tracking-tight">
+                                Summary
+                            </h1>
+                            <p className="text-sm text-muted-foreground mt-2">
+                                No summary available. Upload content to create summary and flashcards.
+                            </p>
+                        </div>
+                    </Card>
+                    <Card className="p-3">
+                        <Flashcards />
+                    </Card>
+                </div>
+                <Card className="p-3 w-1/3 h-fit">
+                    <UploadSection
+                        categoryItemId={categoryItem.id}
+                        initFiles={categoryItem.filenames} />
+                </Card>
+            </div>
         </div>
     );
 }
