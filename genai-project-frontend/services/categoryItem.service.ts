@@ -1,5 +1,5 @@
 import { BACKEND_URI, DEFAULT_CATEGORY_ITEM_PATH, HEADERS } from "@/globals";
-import { CategoryListItem } from "@/types/Category";
+import { CategoryListItem } from "@/types/category";
 import { CategoryItemDetails } from "@/types/categoryItem";
 
 export async function addCategoryItem(name: string, description: string = "", categoryId: number): Promise<CategoryListItem> {
