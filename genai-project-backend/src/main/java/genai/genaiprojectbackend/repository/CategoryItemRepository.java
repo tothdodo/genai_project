@@ -1,6 +1,7 @@
 package genai.genaiprojectbackend.repository;
 
 import genai.genaiprojectbackend.model.entities.CategoryItem;
+import genai.genaiprojectbackend.repository.projection.StatusOnly;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -18,4 +19,6 @@ public interface CategoryItemRepository extends JpaRepository<CategoryItem, Inte
             "LEFT JOIN FETCH ci.files f " +
             "WHERE ci.id = :id")
     Optional<CategoryItem> findByIdWithCategoryAndFiles(@Param("id") Integer id);
+
+    Optional<StatusOnly> findProjectedById(Integer id);
 }

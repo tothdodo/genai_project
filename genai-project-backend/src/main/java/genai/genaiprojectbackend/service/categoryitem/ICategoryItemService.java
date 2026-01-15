@@ -14,4 +14,8 @@ public interface ICategoryItemService {
     List<CategoryItemDTO> getAllByCategory(Integer categoryId);
 
     void delete(Integer id);
+
+    void startGeneration(Integer id);
+
+    String getStatusById(Integer id);
 }

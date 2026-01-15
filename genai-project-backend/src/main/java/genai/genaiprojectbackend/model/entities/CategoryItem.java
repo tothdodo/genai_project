@@ -48,5 +48,6 @@ public class CategoryItem {
         this.description = description;
         this.category = category;
         this.createdAt = Instant.now();
+        this.status = "PENDING";
     }
 }

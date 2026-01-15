@@ -10,5 +10,5 @@ export type CategoryListItem = {
     id: number;
     name: string;
     description: string;
-    createdAt: Date;
+    createdAt: string;
 }

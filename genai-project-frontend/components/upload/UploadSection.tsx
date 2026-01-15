@@ -1,6 +1,6 @@
 "use client"
 
-import { useRef, useState } from "react"
+import { Dispatch, SetStateAction, useEffect, useRef, useState } from "react"
 import { Input } from "@/components/ui/input"
 import { uploadFileUsingPresign } from "@/services/upload.service"
 import SmallButton from "../buttons/SmallButton"
@@ -8,6 +8,8 @@ import { CircularProgress } from "./CircularProgress"
 import {
     CheckIcon, CircleX, FileText, FileImage, FileBox, File as FileGeneric
 } from "lucide-react"
+import { useCategoryItem } from "@/contexts/CategoryItemContext"
+import { MaterialFile } from "@/types/materialFile"
 
 const getFileIcon = (fileName: string) => {
     const extension = fileName.split('.').pop()?.toLowerCase();
@@ -28,58 +30,19 @@ const getFileIcon = (fileName: string) => {
 };
 
 type Props = {
-    categoryItemId: number;
-    initFiles: string[];
+    files: MaterialFile[];
+    setFiles: Dispatch<SetStateAction<MaterialFile[]>>;
+    setFileIsUploading: (uploading: boolean) => void;
 };
 
-type UploadFile = {
-    fileName: string;
-    type: string;
-    status: "uploading" | "completed" | "error";
-    progress: number;
-}
-
 export default function UploadSection({
-    categoryItemId,
-    initFiles
+    files, setFiles,
+    setFileIsUploading
 }: Props) {
-    const [error, setError] = useState<string | null>(null)
+    const { categoryItem, status } = useCategoryItem();
+    const [error, setError] = useState<string | null>(null);
 
-    const [files, setFiles] = useState<UploadFile[]>(() => {
-        // 1. Transform the props as before
-        const initialFromProps: UploadFile[] = initFiles.map((name) => ({
-            fileName: name,
-            type: name.split(".").pop() || "unknown",
-            progress: 100,
-            status: "completed",
-        }));
-
-        // 2. Add manual test records for different states
-        const testRecords: UploadFile[] = [
-            // {
-            //     fileName: "vacation_photosdasdasdasdasdasdasdasdas.jpg",
-            //     type: "jpg",
-            //     status: "uploading",
-            //     progress: 45,
-            // },
-            // {
-            //     fileName: "large_dataset.csv",
-            //     type: "csv",
-            //     status: "error",
-            //     progress: 12,
-            // },
-            // {
-            //     fileName: "presentation_draft.pptx",
-            //     type: "pptx",
-            //     status: "uploading",
-            //     progress: 100,
-            // }
-        ];
-
-        return [...initialFromProps, ...testRecords];
-    });
-
-    const inputRef = useRef<HTMLInputElement>(null)
+    const inputRef = useRef<HTMLInputElement>(null);
 
     async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
         const selectedFile = e.target.files?.[0] ?? null
@@ -87,7 +50,7 @@ export default function UploadSection({
             setError("");
             return;
         }
-        const newFile: UploadFile = {
+        const newFile: MaterialFile = {
             fileName: selectedFile.name,
             type: selectedFile.name.split(".").pop() || "unknown",
             status: "uploading",
@@ -105,7 +68,7 @@ export default function UploadSection({
             await uploadFileUsingPresign(
                 selectedFile,
                 {},
-                categoryItemId,
+                categoryItem.id,
                 (p) => {
                     newFile.progress = p
                     setFiles((prevFiles) =>
@@ -128,10 +91,15 @@ export default function UploadSection({
         }
     }
 
+    useEffect(() => {
+        const uploading = files.some(file => file.status === "uploading");
+        setFileIsUploading(uploading);
+    }, [files, setFileIsUploading]);
+
     return (
         <div>
             <h1 className="text-2xl font-semibold tracking-tight">
-                Material Upload
+                Materials
             </h1>
             {
                 files.length === 0 ?
@@ -172,16 +140,17 @@ export default function UploadSection({
                     {error}
                 </p>
             )}
-
-            {/* <CircularProgress value={progress} /> */}
-            <div className="flex justify-end mt-4">
-                <SmallButton
-                    onClick={() => inputRef.current?.click()}
-                    additionalClasses="w-fit"
-                >
-                    + Upload New File
-                </SmallButton>
-            </div>
+            {
+                status === "PENDING" &&
+                <div className="flex justify-end mt-4">
+                    <SmallButton
+                        onClick={() => inputRef.current?.click()}
+                        additionalClasses="w-fit"
+                    >
+                        + Upload New Material
+                    </SmallButton>
+                </div>
+            }
         </div>
     )
 }

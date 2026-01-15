@@ -10,10 +10,11 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Category, CategoryListItem } from "@/types/category";
+import { Category } from "@/types/category";
 import { addCategory } from "@/services/category.service";
 import { Textarea } from "../ui/textarea";
 import { addCategoryItem } from "@/services/categoryItem.service";
+import { CategoryItem } from "@/types/categoryItem";
 
 export enum CreationType {
     CATEGORY = "CATEGORY",
@@ -26,7 +27,7 @@ type Props = {
     objectName: string;
     categoryId?: number;
     onOpenChange: (open: boolean) => void;
-    onCreated: (category: Category | CategoryListItem) => void;
+    onCreated: (category: Category | CategoryItem) => void;
 };
 
 export function CreateDialog({
@@ -44,7 +45,7 @@ export function CreateDialog({
     async function handleCreate() {
         try {
             setCreating(true);
-            let created: Category | CategoryListItem;
+            let created: Category | CategoryItem;
             if (creationType === CreationType.CATEGORY) {
                 created = await addCategory(name, description);
             } else {
