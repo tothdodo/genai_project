@@ -49,7 +49,7 @@ export async function addCategory(name: string, description: string | null = nul
     const params = {
         method: "POST",
         headers: HEADERS,
-        body: JSON.stringify({ name, description }),
+        body: JSON.stringify({ name, description: description === "" ? null : description }),
     };
     const url = `${CLIENT_BACKEND_URI}${DEFAULT_CATEGORY_PATH}`;
     console.log("Calling: ", url);

@@ -8,10 +8,11 @@ import { UploadFile } from "@/types/uploadFile"
 export async function getPresignedUploadUrl(
     file: File,
     hash: string,
+    timeStampString: string,
     categoryItemId: number
 ): Promise<FileInfo> {
     const payload: FileInfo = {
-        fileName: `${hash}_${file.name}`,
+        fileName: `${timeStampString}_${hash}_${file.name}`,
         originalFileName: file.name,
         categoryItemId: categoryItemId
     }
@@ -87,10 +88,11 @@ export async function uploadToPresignedUrl(
 export async function notifyUploadComplete(
     file: File,
     hash: string,
+    timeStampString: string,
     categoryItemId: number
 ): Promise<FileInfo> {
     const payload: FileInfo = {
-        fileName: `${hash}_${file.name}`,
+        fileName: `${timeStampString}_${hash}_${file.name}`,
         originalFileName: file.name,
         categoryItemId: categoryItemId
     }
@@ -143,7 +145,9 @@ export async function uploadFileUsingPresign(
     const hash = await hashFile(file);
     uploadFile.hash = hash;
 
-    const info = await getPresignedUploadUrl(file, hash, categoryItemId);
+    const timeStampString = Date.now().toString();
+
+    const info = await getPresignedUploadUrl(file, hash, timeStampString, categoryItemId);
 
     if (!info.presignedURL) {
         throw new Error("Presign request failed: missing presignedURL");
@@ -153,5 +157,5 @@ export async function uploadFileUsingPresign(
     await uploadToPresignedUrl(file, info.presignedURL, "PUT", onProgress);
 
     // Optional: Notify backend completion after successful upload
-    await notifyUploadComplete(file, hash, categoryItemId);
+    await notifyUploadComplete(file, hash, timeStampString, categoryItemId);
 }

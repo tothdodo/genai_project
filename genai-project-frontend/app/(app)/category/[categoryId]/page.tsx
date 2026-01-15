@@ -1,3 +1,4 @@
+import { Card } from "@/components/ui/card";
 import { getCategoryById } from "@/services/category.service";
 import { Category } from "@/types/category";
 import { notFound } from "next/navigation";
@@ -14,7 +15,7 @@ export default async function CategoryPage(props: { params: Params }) {
     if (!category) return notFound();
 
     return (
-        <div className="space-y-4">
+        <Card className="p-4 max-w-4xl">
             <div>
                 <h1 className="text-2xl font-semibold tracking-tight">
                     {category.name}
@@ -25,10 +26,10 @@ export default async function CategoryPage(props: { params: Params }) {
                     Description
                 </p>
 
-                <p className="text-sm leading-relaxed text-foreground whitespace-pre-line">
+                <p className="text-sm text-muted-foreground mt-2 whitespace-pre-wrap">
                     {category.description ?? "No description provided."}
                 </p>
             </div>
-        </div>
+        </Card>
     );
 }

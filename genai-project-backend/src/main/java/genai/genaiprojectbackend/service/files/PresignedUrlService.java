@@ -3,7 +3,6 @@ package genai.genaiprojectbackend.service.files;
 import genai.genaiprojectbackend.api.bucket.dtos.FileInfoDto;
 import genai.genaiprojectbackend.model.entities.CategoryItem;
 import genai.genaiprojectbackend.repository.CategoryItemRepository;
-import genai.genaiprojectbackend.service.workers.WorkerStartService;
 import io.minio.GetPresignedObjectUrlArgs;
 import io.minio.MinioAsyncClient;
 import io.minio.StatObjectArgs;
@@ -28,7 +27,6 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import genai.genaiprojectbackend.configuration.MinioProperties;
 import genai.genaiprojectbackend.mapper.UrlMapper;
-import genai.genaiprojectbackend.model.dtos.StartSummaryGenerationJobDto;
 import genai.genaiprojectbackend.model.entities.File;
 import genai.genaiprojectbackend.model.entities.Url;
 import genai.genaiprojectbackend.repository.FileRepository;
@@ -42,11 +40,9 @@ public class PresignedUrlService implements IPresignedUrlService {
     protected final MinioAsyncClient minioClient;
     protected final MinioProperties minioProperties;
 
-    // private final FileDao fileDao;
     private final UrlRepository urlRepository;
     private final FileRepository fileRepository;
     private final CategoryItemRepository categoryItemRepository;
-    private final WorkerStartService workerStartService;
     private final UrlMapper urlMapper;
     // minimum added time to the current time when checking for expiry
     private final int minimumAddedTime = 20;
@@ -143,8 +139,6 @@ public class PresignedUrlService implements IPresignedUrlService {
                 fileInfo = new FileInfoDto(fileOpt.get());
                 fileInfo.setPresignedURL(createdUpload.get().getPresignedURL());
                 fileInfo.setUploaded(false);
-                // fileInfo.setFolderId(fileOpt.get().getFolder() != null ?
-                // fileOpt.get().getFolder().getId() : null);
                 return Optional.of(fileInfo);
             }
 
@@ -154,7 +148,6 @@ public class PresignedUrlService implements IPresignedUrlService {
             file.setFilename(fileName);
             file.setUploaded(false);
             file.setOriginalFilename(originalFileName);
-            // file.setStatus("UPLOADED");
             if (categoryItemId != null) {
                 CategoryItem categoryItem = categoryItemRepository.findById(categoryItemId)
                         .orElseThrow(() -> new IllegalArgumentException(
@@ -173,8 +166,6 @@ public class PresignedUrlService implements IPresignedUrlService {
             fileInfo.setOriginalFileName(originalFileName);
             fileInfo = fOpt.get();
             fileInfo.setUrlExpiresAt(expiresAt);
-            // fileInfo.setFolderId(file.getFolder() != null ? file.getFolder().getId() :
-            // null);
             url.setFile(file);
             url.setPresignedURL(fOpt.get().getPresignedURL());
             url.setMethod(Method.PUT);
@@ -214,7 +205,6 @@ public class PresignedUrlService implements IPresignedUrlService {
 
         file.setUploaded(true);
         file.setUploadedAt(Instant.now());
-        //file.setUrl(fileInfoOpt.get().getPresignedURL());
         file = fileRepository.save(file);
         FileInfoDto dto = new FileInfoDto(file);
         urlRepository.deleteByFileIdAndMethod(file.getId(), Method.PUT);
@@ -223,15 +213,7 @@ public class PresignedUrlService implements IPresignedUrlService {
         dto.setPresignedURL(fileInfoOpt.get().getPresignedURL());
         dto.setUrlExpiresAt(expiresAt);
 
-        // TODO change to real jobId when job status management is implemented
-        sendFinishMessage("1234", dto.getPresignedURL());
-
         return Optional.of(dto);
-    }
-
-    private void sendFinishMessage(String jobId, String presignedUploadUrl) {
-        StartSummaryGenerationJobDto jobDto = new StartSummaryGenerationJobDto(jobId, presignedUploadUrl);
-        workerStartService.startSummaryGenerationJob(jobDto);
     }
 
     private boolean checkExistence(FileInfoDto body) {

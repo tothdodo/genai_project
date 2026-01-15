@@ -6,13 +6,15 @@ import { getAllCategories } from "@/services/category.service";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ChevronDown } from "lucide-react";
-import { Category, CategoryListItem } from "@/types/category";
+import { Category } from "@/types/category";
 import { CreateDialog, CreationType } from "@/components/categories/CreateDialog";
 import Link from "next/link";
 import LoadingCategories from "@/components/categories/LoadingCategories";
 import { cn } from "@/lib/utils"
 import LargeButton from "@/components/buttons/LargeButton";
 import SmallButton from "@/components/buttons/SmallButton";
+import { CategoryItem } from "@/types/categoryItem";
+import { useRouter } from "next/navigation";
 
 export default function AppLayout({
     children,
@@ -34,6 +36,10 @@ export default function AppLayout({
             .then(setCategories)
             .finally(() => setLoading(false));
     }, []);
+
+
+    // Inside your main component:
+    const router = useRouter();
 
 
     return (
@@ -71,21 +77,24 @@ export default function AppLayout({
                     categoryId={categoryIdToAddItem}
                     onCreated={(created) => {
                         if (creationType === CreationType.CATEGORY) {
-                            setCategories((prev) => [created as Category, ...prev]);
+                            const newCategory = created as Category;
+                            setCategories((prev) => [newCategory, ...prev]);
+                            router.push(`/category/${newCategory.id}`);
                         } else {
+                            const newCategoryItem = created as CategoryItem;
                             setCategories((prev) => {
                                 return prev.map((category) => {
                                     if (category.id === categoryIdToAddItem) {
                                         return {
                                             ...category,
-                                            categoryItems: [...(category.categoryItems || []), created as CategoryListItem],
+                                            categoryItems: [...(category.categoryItems || []), newCategoryItem],
                                         };
                                     }
                                     return category;
                                 })
                             });
+                            router.push(`/category/${newCategoryItem.categoryId}/item/${newCategoryItem.id}`);
                         }
-
                     }}
                 />
                 <ScrollArea className="h-full px-3 py-4">

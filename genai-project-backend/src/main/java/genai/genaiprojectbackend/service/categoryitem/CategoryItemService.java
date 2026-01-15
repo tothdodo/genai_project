@@ -6,11 +6,15 @@ import genai.genaiprojectbackend.api.categoryitem.dtos.CategoryItemDetailsDTO;
 import genai.genaiprojectbackend.api.categoryitem.dtos.CreateCategoryItemDTO;
 import genai.genaiprojectbackend.api.exceptions.BadRequestException;
 import genai.genaiprojectbackend.api.exceptions.NotFoundException;
+import genai.genaiprojectbackend.mapper.CategoryItemMapper;
+import genai.genaiprojectbackend.model.dtos.StartTextExtractionJobDto;
 import genai.genaiprojectbackend.model.entities.Category;
 import genai.genaiprojectbackend.model.entities.CategoryItem;
 import genai.genaiprojectbackend.model.entities.File;
 import genai.genaiprojectbackend.repository.CategoryItemRepository;
 import genai.genaiprojectbackend.repository.CategoryRepository;
+import genai.genaiprojectbackend.repository.projection.StatusOnly;
+import genai.genaiprojectbackend.service.workers.WorkerStartService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
@@ -20,13 +24,18 @@ import java.util.List;
 public class CategoryItemService implements ICategoryItemService {
     private final CategoryItemRepository itemRepository;
     private final CategoryRepository categoryRepository;
+    private final WorkerStartService workerStartService;
+    private final CategoryItemMapper mapper;
 
     public CategoryItemService(
             CategoryItemRepository itemRepository,
-            CategoryRepository categoryRepository
-    ) {
+            CategoryRepository categoryRepository,
+            WorkerStartService workerStartService,
+            CategoryItemMapper mapper) {
         this.itemRepository = itemRepository;
         this.categoryRepository = categoryRepository;
+        this.workerStartService = workerStartService;
+        this.mapper = mapper;
     }
 
     @Override
@@ -50,7 +59,7 @@ public class CategoryItemService implements ICategoryItemService {
         );
 
         CategoryItem saved = itemRepository.save(item);
-        return toDTO(saved);
+        return mapper.toDTO(saved);
     }
 
     @Override
@@ -60,7 +69,7 @@ public class CategoryItemService implements ICategoryItemService {
                 .orElseThrow(() -> new NotFoundException(
                         "Category item not found with id: " + id
                 ));
-        return toDTOWithFolder(item);
+        return mapper.toDetailsDTO(item);
     }
 
     @Override
@@ -68,7 +77,7 @@ public class CategoryItemService implements ICategoryItemService {
     public List<CategoryItemDTO> getAllByCategory(Integer categoryId) {
         return itemRepository.findAllByCategoryIdOrderByCreatedAtDesc(categoryId)
                 .stream()
-                .map(this::toDTO)
+                .map(mapper::toDTO)
                 .toList();
     }
 
@@ -80,36 +89,23 @@ public class CategoryItemService implements ICategoryItemService {
         itemRepository.deleteById(id);
     }
 
-    private CategoryItemDTO toDTO(CategoryItem item) {
-        return new CategoryItemDTO(
-                item.getId(),
-                item.getName(),
-                item.getDescription(),
-                item.getCreatedAt(),
-                item.getCategory().getId()
-        );
+    @Override
+    @Transactional // Ensures the status update is persisted correctly
+    public void startGeneration(Integer id) {
+        CategoryItem item = itemRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException("Category item not found with id: " + id));
+
+        item.setStatus("PROCESSING");
+        itemRepository.save(item);
+
+        StartTextExtractionJobDto jobDto = new StartTextExtractionJobDto("77", id);
+        workerStartService.startTextExtractionJob(jobDto);
     }
 
-    private CategoryItemDetailsDTO toDTOWithFolder(CategoryItem item) {
-        Category category = item.getCategory();
-
-        CategoryHeaderDTO categoryHeader = new CategoryHeaderDTO(
-                category.getId(),
-                category.getName()
-        );
-
-        List<String> filenames = item.getFiles().stream()
-                .map(File::getOriginalFilename)
-                .toList();
-
-        return new CategoryItemDetailsDTO(
-                item.getId(),
-                item.getName(),
-                item.getDescription(),
-                item.getCreatedAt(),
-                item.getStatus(),
-                categoryHeader,
-                filenames
-        );
+    @Override
+    public String getStatusById(Integer id) {
+        return itemRepository.findProjectedById(id)
+                .map(StatusOnly::getStatus)
+                .orElseThrow(() -> new NotFoundException("Category item not found with id: " + id));
     }
 }

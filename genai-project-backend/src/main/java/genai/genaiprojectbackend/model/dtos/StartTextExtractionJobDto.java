@@ -10,4 +10,6 @@ import lombok.Setter;
 @AllArgsConstructor
 @Builder
 public class StartTextExtractionJobDto {
+    private final String jobId;
+    private final Integer categoryItemId;
 }

@@ -11,9 +11,6 @@ from jsonschema.exceptions import ValidationError
 from jsonschema.validators import validate
 from pika.exceptions import ChannelWrongStateError, ReentrancyError, StreamLostError
 
-# Add .. to the beginning of these imports to test locally
-#from messaging.message_model import BaseMessage
-from messaging.result_publisher import ResultPublisher
 from messaging.rabbit_config import get_rabbitmq_config
 from messaging.rabbit_connect import create_rabbit_con_and_return_channel
 from schemas.summary_generation import schema as summary_generation_schema
