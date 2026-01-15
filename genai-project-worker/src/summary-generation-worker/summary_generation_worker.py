@@ -4,6 +4,9 @@ import sys
 import time
 import json
 import argparse
+import os
+import google.generativeai as genai
+
 from jsonschema.exceptions import ValidationError
 from jsonschema.validators import validate
 from pika.exceptions import ChannelWrongStateError, ReentrancyError, StreamLostError
@@ -15,13 +18,30 @@ from messaging.rabbit_config import get_rabbitmq_config
 from messaging.rabbit_connect import create_rabbit_con_and_return_channel
 from schemas.summary_generation import schema as summary_generation_schema
 
+# --- Gemini Configuration ---
+# Configure the API with your key
+genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+model = genai.GenerativeModel('gemini-pro')
+
+SUMMARY_PROMPT = """
+Summarize the following content clearly and concisely.
+Focus on key ideas, definitions, and facts.
+Avoid repetition.
+
+TEXT:
+{text}
+"""
+
 rabbitConfig = get_rabbitmq_config()
+
 
 def handle_sigterm(signum, frame):
     logging.info("SIGTERM received")
     sys.exit(0)
 
+
 signal.signal(signal.SIGTERM, handle_sigterm)
+
 
 def connect_rabbitmq():
     while True:
@@ -31,49 +51,100 @@ def connect_rabbitmq():
             logging.error("RabbitMQ connection failed, Retrying in 5s... Error: {}".format(e))
             time.sleep(5)
 
+
 def validate_request(json_req):
     try:
         validate(instance=json_req, schema=summary_generation_schema)
     except ValidationError as e:
-        logging.warning(f"The precompute job request is invalid, ValidationError error: {e}")
-        return False #TODO: Might be an exception here as well
+        logging.warning(f"The job request is invalid: {e}")
+        return False
     return True
 
-def mk_error_msg(error_msg: str):
-    return {"msg": error_msg}
-
-def mk_summary():
-    return "Summary"
 
 def process_req(ch, method, properties, body):
-    #publisher = ResultPublisher(ch)
     start_time = time.time()
-    request = json.loads(body)
-    logging.info(start_time)
-    logging.info("Received request: {}".format(request))
+
+    try:
+        # 1. Parse Body
+        request = json.loads(body)
+        logging.info(f"Received request: {request}")
+
+        # 2. Validate Schema
+        if not validate_request(request):
+            logging.error("Validation failed. Dropping message.")
+            return
+
+        # 3. Extract Fields
+        job_id = request.get('job_id')
+        input_text = request.get('text')
+        category_id = request.get('category_id')
+        chunk_number = request.get('chunk_number')
+
+        if not input_text or not job_id:
+            logging.error("Missing 'text' or 'job_id' in payload.")
+            return
+
+        # 4. Generate Summary via Gemini
+        logging.info(f"Generating summary for Job {job_id}...")
+        status = "unknown"
+        summary_text = ""
+
+        try:
+            formatted_prompt = SUMMARY_PROMPT.format(text=input_text)
+            response = model.generate_content(formatted_prompt)
+            summary_text = response.text
+            status = "success"
+        except Exception as api_error:
+            logging.error(f"Gemini API Error: {api_error}")
+            status = "failed"
+            summary_text = "Error generating summary."
+
+        # 5. Prepare Result Payload
+        result_payload = {
+            "summary": summary_text,
+            "category_id": category_id,
+            "chunk_number": chunk_number,
+            "duration": time.time() - start_time
+        }
+
+        # 6. Publish Result
+        # Initialize publisher with the existing channel to reuse the connection
+        publisher = ResultPublisher(ch)
+        publisher.publish_summary_result(
+            payload=result_payload,
+            original_job_id=job_id,
+            status=status
+        )
+
+        logging.info(f"Job {job_id} completed. Status: {status}. Time: {time.time() - start_time:.2f}s")
+
+    except json.JSONDecodeError:
+        logging.error("Failed to decode JSON body")
+    except Exception as e:
+        logging.error(f"Unexpected error in process_req: {e}")
 
 
 def main():
-    # logging.info(f"Connected to RabbitMQ Listening on queue '{rabbitConfig.queue_comparison_job}'")
     logging.info("Summary Generation Worker Started!")
     channel = connect_rabbitmq()
 
     def callback(ch, method, properties, body):
         process_req(ch, method, properties, body)
 
-    channel.basic_consume(queue=rabbitConfig.queue_summary_generation_job, on_message_callback=callback, auto_ack=True)
+    # Using the queue name from definitions.json
+    queue_name = "worker.summary.generation.job"
 
-    logging.info("Waiting for messages")
+    # Ensure this matches your rabbit_config.queue_summary_generation_job
+    # If rabbitConfig is used, ensure it maps to the string above.
+    channel.basic_consume(queue=queue_name, on_message_callback=callback, auto_ack=True)
+
+    logging.info(f"Waiting for messages on {queue_name}")
     try:
         channel.start_consuming()
     except KeyboardInterrupt:
         logging.warning("Worker interrupted by KeyboardInterrupt")
-    except ReentrancyError as e:
-        logging.error("Reentrancy error for start consuming on the channel: {}".format(e))
-    except ChannelWrongStateError as e:
-        logging.error("Channel error: {}".format(e))
-    except StreamLostError as e:
-        logging.error("Stream lost error: {}".format(e))
+    except (ReentrancyError, ChannelWrongStateError, StreamLostError) as e:
+        logging.error(f"RabbitMQ Connection Error: {e}")
 
 
 if __name__ == '__main__':

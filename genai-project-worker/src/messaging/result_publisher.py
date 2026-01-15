@@ -17,19 +17,21 @@ class ResultPublisher:
         else:
             self._ch = ch
 
-    def _publish(self, routing_key: str, payload, msg_type: str, status: str = "unknown"):
+    def _publish(self, routing_key: str, payload, msg_type: str, status: str = "unknown", job_id_override: str = None):
         if isinstance(payload, BaseMessage):
             msg = payload
         else:
+            final_job_id = job_id_override if job_id_override else str(uuid.uuid4())
+
             msg = BaseMessage(
                 type=msg_type,
                 status=status,
-                job_id=str(uuid.uuid4()),
+                job_id=final_job_id,
                 payload=payload,
             )
 
         self._ch.basic_publish(
-            exchange=rabbitConfig.exchange_worker_results,
+            exchange="worker-results",
             routing_key=routing_key,
             body=msg.to_json(),
             properties=pika.BasicProperties(
@@ -49,6 +51,17 @@ class ResultPublisher:
 
     def publish_chunking_comparison_result(self, payload: dict, status: str = "unknown"):
         self._publish(rabbitConfig.routing_chunking_comparison_result, payload, rabbitConfig.routing_chunking_comparison_result,status=status)
+
+    def publish_summary_result(self, payload: dict, original_job_id: str, status: str = "unknown"):
+        routing_key = "worker.summary.generation.result"
+
+        self._publish(
+            routing_key=routing_key,
+            payload=payload,
+            msg_type=routing_key,
+            status=status,
+            job_id_override=original_job_id  # Pass the ID to link request to result
+        )
 
     def close(self):
         # if connection is done externally, connection is not closed here

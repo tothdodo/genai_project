@@ -1,27 +1,22 @@
 schema = {
     "type": "object",
-    "required": ["jobId", "file", "fileId"],
+    "required": ["job_id", "category_id", "text"],
     "properties": {
-        "jobId": {
+        "job_id": {
             "type": "string",
             "minLength": 1
         },
-        "presignedUploadUrl": {
+        "category_id": {
+            "type": "integer",
+            "minimum": 1
+        },
+        "text": {
             "type": "string",
             "minLength": 1
+        },
+        "chunk_number": {
+            "type": "integer",
+            "minimum": 1
         }
-        # "file": {
-        #     "type": "object",
-        #     "required": ["bucket", "objectKey"],
-        #     "properties": {
-        #         "bucket": {"type": "string"},
-        #         "objectKey": {"type": "string"}
-        #     }
-        # },
-        # "fileId": {
-        #     "type": "integer",
-        #     "minimum": 1
-        # }
-    },
-    "additionalProperties": False
+    }
 }
