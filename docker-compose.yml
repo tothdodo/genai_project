@@ -126,6 +126,8 @@ services:
       context: ./genai-project-worker
       dockerfile: Dockerfile-text-extraction-worker
     container_name: text-extraction-worker
+    env_file:
+      - .env
     depends_on:
       minio:
         condition: service_started

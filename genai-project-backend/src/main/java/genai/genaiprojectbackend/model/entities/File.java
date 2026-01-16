@@ -55,6 +55,9 @@ public class File {
     @JoinColumn(name = "category_item_id")
     private CategoryItem categoryItem;
 
+    @Column(name = "url")
+    private String url;
+
     @OneToMany(mappedBy = "file")
     private Set<Url> urls = new LinkedHashSet<>();
 
