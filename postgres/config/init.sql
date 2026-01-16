@@ -72,12 +72,12 @@ CREATE TABLE text_chunks (
 -- Generated from text chunks, flashcard_generation worker input, and aggregate worker deletes them when it is finished
 CREATE TABLE summary_chunks (
     id                  INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
-    chunk_id            INTEGER NOT NULL UNIQUE,
+    text_chunk_id            INTEGER NOT NULL UNIQUE,
     summary_text        TEXT NOT NULL,
     created_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
 
     CONSTRAINT fk_summary_chunk -- Link back to the original text chunk (file, page, chunk_index info)
-        FOREIGN KEY (chunk_id) REFERENCES text_chunks(id)
+        FOREIGN KEY (text_chunk_id) REFERENCES text_chunks(id)
 );
 
 -- Generated from summary chunks, aggregate worker input and  deletes them when it is finished
@@ -140,7 +140,15 @@ CREATE TABLE jobs (
         FOREIGN KEY (category_item_id) REFERENCES category_items(id) ON DELETE SET NULL
 );
 
-CREATE INDEX idx_chunks_file ON text_chunks(file_id);
-CREATE INDEX idx_summary_file ON summary_chunks(file_id);
-CREATE INDEX idx_flashcards_file ON flashcards(file_id);
-CREATE INDEX idx_jobs_file ON jobs(file_id);
+-- To Delete Text Chunks/Summary Chunks/Temp Flashcards efficiently by category_item_id when generation is finished
+CREATE INDEX idx_chunks_category_item ON text_chunks(category_item_id);
+CREATE INDEX idx_summary_text_chunk ON summary_chunks(text_chunk_id);
+CREATE INDEX idx_temp_flashcards_summary_chunk ON temporary_flashcards(summary_chunk_id);
+
+-- To Get Final Flashcards/Summaries by category_item_id efficiently
+CREATE INDEX idx_final_flashcards_category_item ON final_flashcards(category_item_id);
+CREATE INDEX idx_final_summaries_category_item ON final_summaries(category_item_id);
+
+-- To Get Jobs by file_id and status/job_type efficiently
+CREATE INDEX idx_jobs_file_id ON jobs(file_id);
+CREATE INDEX idx_jobs_status_type ON jobs(status, job_type);
