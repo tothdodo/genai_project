@@ -1,5 +1,6 @@
 package genai.genaiprojectbackend.api.categoryitem.dtos;
 
+import genai.genaiprojectbackend.model.enums.CategoryItemStatus;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.Setter;
@@ -15,7 +16,7 @@ public class CategoryItemDetailsDTO {
     private final String name;
     private final String description;
     private final Instant createdAt;
-    private final String status;
+    private final CategoryItemStatus status;
     private final CategoryHeaderDTO category;
     private List<String> filenames;
 }

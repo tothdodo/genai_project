@@ -31,7 +31,7 @@ export function ApproveStartGenerationDialog({
                 <p>
                     Are you sure you want to start the generation process?
                     <br /><br />
-                    You will not able to change Materials anymore.
+                    You will not be able to change materials anymore.
                 </p>
                 <DialogFooter>
                     <Button

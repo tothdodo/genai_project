@@ -40,17 +40,17 @@ class ResultPublisher:
             ),
         )
 
-    def publish_preprocessing_result(self, payload, status: str = "unknown"):
-        self._publish(routing_key=rabbitConfig.routing_preprocessing_result, payload=payload, msg_type=rabbitConfig.routing_preprocessing_result, status=status)
+    # def publish_preprocessing_result(self, payload, status: str = "unknown"):
+    #     self._publish(routing_key=rabbitConfig.routing_preprocessing_result, payload=payload, msg_type=rabbitConfig.routing_preprocessing_result, status=status)
+    #
+    # def publish_comparison_result(self, payload: dict, status: str = "unknown"):
+    #     self._publish(rabbitConfig.routing_comparison_result, payload, rabbitConfig.routing_comparison_result,status=status)
 
-    def publish_comparison_result(self, payload: dict, status: str = "unknown"):
-        self._publish(rabbitConfig.routing_comparison_result, payload, rabbitConfig.routing_comparison_result,status=status)
+    def publish_text_extraction_result(self, payload: dict, status: str = "unknown"):
+        self._publish(rabbitConfig.routing_text_extraction_result, payload, rabbitConfig.routing_text_extraction_result,status=status)
 
-    def publish_metadata_result(self, payload: dict, status: str = "unknown"):
-        self._publish(rabbitConfig.routing_metadata_result, payload, rabbitConfig.routing_metadata_result,status=status)
-
-    def publish_chunking_comparison_result(self, payload: dict, status: str = "unknown"):
-        self._publish(rabbitConfig.routing_chunking_comparison_result, payload, rabbitConfig.routing_chunking_comparison_result,status=status)
+    # def publish_chunking_comparison_result(self, payload: dict, status: str = "unknown"):
+    #     self._publish(rabbitConfig.routing_chunking_comparison_result, payload, rabbitConfig.routing_chunking_comparison_result,status=status)
 
     def publish_summary_result(self, payload: dict, original_job_id: str, status: str = "unknown"):
         routing_key = "worker.summary.generation.result"

@@ -43,6 +43,7 @@ CREATE TABLE IF NOT EXISTS files (
     uploaded            BOOLEAN DEFAULT FALSE,
     uploaded_at         TIMESTAMP,
     category_item_id    INTEGER,
+    url                 TEXT,
 
     CONSTRAINT fk_category_item_id
     FOREIGN KEY (category_item_id) REFERENCES category_items(id) ON DELETE SET NULL
@@ -124,7 +125,7 @@ CREATE TABLE final_summaries (
 
 CREATE TABLE jobs (
     id                  INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
-    file_id             INTEGER NOT NULL,
+    file_id             INTEGER,
     job_type            VARCHAR(30) CHECK (job_type in ('TEXT_EXTRACTION', 'SUMMARY_GENERATION', 'FLASHCARD_GENERATION', 'AGGREGATION')) NOT NULL,
     status              VARCHAR(30) CHECK (status in ('PENDING', 'IN_PROGRESS', 'FINISHED', 'FAILED')) NOT NULL,
     --total_tasks         INTEGER DEFAULT 0 NOT NULL,

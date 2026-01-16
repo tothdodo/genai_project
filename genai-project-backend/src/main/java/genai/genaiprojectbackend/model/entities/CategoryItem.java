@@ -1,5 +1,6 @@
 package genai.genaiprojectbackend.model.entities;
 
+import genai.genaiprojectbackend.model.enums.CategoryItemStatus;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -33,8 +34,9 @@ public class CategoryItem {
     @JoinColumn(name = "category_id", nullable = false)
     private Category category;
 
+    @Enumerated(EnumType.STRING)
     @Column(name = "status")
-    private String status;
+    private CategoryItemStatus status;
 
     @OneToMany(mappedBy = "categoryItem")
     private List<File> files;
@@ -48,6 +50,6 @@ public class CategoryItem {
         this.description = description;
         this.category = category;
         this.createdAt = Instant.now();
-        this.status = "PENDING";
+        this.status = CategoryItemStatus.PENDING;
     }
 }

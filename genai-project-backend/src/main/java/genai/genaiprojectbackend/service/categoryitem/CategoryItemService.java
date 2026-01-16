@@ -8,15 +8,22 @@ import genai.genaiprojectbackend.api.exceptions.BadRequestException;
 import genai.genaiprojectbackend.api.exceptions.NotFoundException;
 import genai.genaiprojectbackend.mapper.CategoryItemMapper;
 import genai.genaiprojectbackend.model.dtos.StartTextExtractionJobDto;
+import genai.genaiprojectbackend.model.dtos.WorkerFile;
 import genai.genaiprojectbackend.model.entities.Category;
 import genai.genaiprojectbackend.model.entities.CategoryItem;
 import genai.genaiprojectbackend.model.entities.File;
+import genai.genaiprojectbackend.model.entities.Job;
+import genai.genaiprojectbackend.model.enums.CategoryItemStatus;
+import genai.genaiprojectbackend.model.enums.JobType;
 import genai.genaiprojectbackend.repository.CategoryItemRepository;
 import genai.genaiprojectbackend.repository.CategoryRepository;
+import genai.genaiprojectbackend.repository.FileRepository;
+import genai.genaiprojectbackend.repository.JobRepository;
 import genai.genaiprojectbackend.repository.projection.StatusOnly;
 import genai.genaiprojectbackend.service.workers.WorkerStartService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
 import java.util.List;
 
 @Service
@@ -25,16 +32,22 @@ public class CategoryItemService implements ICategoryItemService {
     private final CategoryItemRepository itemRepository;
     private final CategoryRepository categoryRepository;
     private final WorkerStartService workerStartService;
+    private final JobRepository jobRepository;
+    private final FileRepository fileRepository;
     private final CategoryItemMapper mapper;
 
     public CategoryItemService(
             CategoryItemRepository itemRepository,
             CategoryRepository categoryRepository,
             WorkerStartService workerStartService,
+            JobRepository jobRepository,
+            FileRepository fileRepository,
             CategoryItemMapper mapper) {
         this.itemRepository = itemRepository;
         this.categoryRepository = categoryRepository;
         this.workerStartService = workerStartService;
+        this.jobRepository = jobRepository;
+        this.fileRepository = fileRepository;
         this.mapper = mapper;
     }
 
@@ -90,15 +103,35 @@ public class CategoryItemService implements ICategoryItemService {
     }
 
     @Override
-    @Transactional // Ensures the status update is persisted correctly
-    public void startGeneration(Integer id) {
-        CategoryItem item = itemRepository.findById(id)
-                .orElseThrow(() -> new NotFoundException("Category item not found with id: " + id));
+    @Transactional
+    public void startGeneration(Integer categoryItemId) {
+        // Change CategoryItem Status
+        CategoryItem item = itemRepository.findById(categoryItemId)
+                .orElseThrow(() -> new NotFoundException("Category item not found with id: " + categoryItemId));
 
-        item.setStatus("PROCESSING");
+        item.setStatus(CategoryItemStatus.PROCESSING);
         itemRepository.save(item);
 
-        StartTextExtractionJobDto jobDto = new StartTextExtractionJobDto("77", id);
+        // Get FileIds and Urls for them
+        List<WorkerFile> files = fileRepository.findByCategoryItemId(categoryItemId);
+
+        if (files.isEmpty()) {
+            throw new BadRequestException("No files found for this category item");
+        }
+
+        // Create new job
+        Job job = new Job(
+                JobType.TEXT_EXTRACTION,
+                categoryItemId
+        );
+        Job savedJob = jobRepository.save(job);
+
+        // Start Text Extraction Job
+        StartTextExtractionJobDto jobDto = new StartTextExtractionJobDto(
+                savedJob.getId(),
+                categoryItemId,
+                files
+        );
         workerStartService.startTextExtractionJob(jobDto);
     }
 

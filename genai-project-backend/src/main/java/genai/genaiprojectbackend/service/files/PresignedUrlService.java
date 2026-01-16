@@ -203,6 +203,7 @@ public class PresignedUrlService implements IPresignedUrlService {
             return Optional.empty();
         }
 
+        file.setUrl(fileInfoOpt.get().getPresignedURL());
         file.setUploaded(true);
         file.setUploadedAt(Instant.now());
         file = fileRepository.save(file);
