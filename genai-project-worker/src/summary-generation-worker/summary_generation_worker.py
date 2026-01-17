@@ -13,12 +13,13 @@ from pika.exceptions import ChannelWrongStateError, ReentrancyError, StreamLostE
 
 from messaging.rabbit_config import get_rabbitmq_config
 from messaging.rabbit_connect import create_rabbit_con_and_return_channel
+from messaging.result_publisher import ResultPublisher
 from schemas.summary_generation import schema as summary_generation_schema
+from util.gemini_client import GeminiClient
 
 # --- Gemini Configuration ---
 # Configure the API with your key
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-model = genai.GenerativeModel('gemini-pro')
 
 SUMMARY_PROMPT = """
 Summarize the following content clearly and concisely.
@@ -87,9 +88,9 @@ def process_req(ch, method, properties, body):
         summary_text = ""
 
         try:
+            gemini_client = GeminiClient()
             formatted_prompt = SUMMARY_PROMPT.format(text=input_text)
-            response = model.generate_content(formatted_prompt)
-            summary_text = response.text
+            summary_text = gemini_client.generate_content(formatted_prompt)
             status = "success"
         except Exception as api_error:
             logging.error(f"Gemini API Error: {api_error}")

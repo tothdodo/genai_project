@@ -20,7 +20,7 @@ public class Job {
     private Integer id;
 
     @Column(name = "file_id")
-    private Integer fileId;
+    private Long fileId;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "job_type", length = 30, nullable = false)
@@ -41,13 +41,9 @@ public class Job {
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
 
-    // Default constructor for JPA
     public Job() {}
 
-    public Job(
-            JobType jobType,
-            Integer categoryItemId
-    ){
+    public Job(JobType jobType, Integer categoryItemId) {
         this.jobType = jobType;
         this.status = JobStatus.IN_PROGRESS;
         this.categoryItemId = categoryItemId;
