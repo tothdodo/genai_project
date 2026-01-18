@@ -1,5 +1,6 @@
 package genai.genaiprojectbackend.service.workers;
 
+import genai.genaiprojectbackend.model.dtos.StartFlashcardGenerationJobDto;
 import genai.genaiprojectbackend.model.dtos.StartSummaryGenerationJobDto;
 import genai.genaiprojectbackend.model.entities.*;
 import genai.genaiprojectbackend.model.enums.JobStatus;
@@ -11,7 +12,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.IntStream;
 import java.util.Optional;
 
 @Service
@@ -19,6 +19,7 @@ public class WorkerResultService {
     private final WorkerStartService workerStartService;
     private final TextChunkRepository textChunkRepository;
     private final SummaryChunkRepository summaryChunkRepository;
+    private final TemporaryFlashcardRepository temporaryFlashcardRepository; // NEW
     private final FileRepository fileRepository;
     private final CategoryItemRepository categoryItemRepository;
     private final JobRepository jobRepository;
@@ -26,6 +27,7 @@ public class WorkerResultService {
     public WorkerResultService(
             TextChunkRepository textChunkRepository,
             SummaryChunkRepository summaryChunkRepository,
+            TemporaryFlashcardRepository temporaryFlashcardRepository, // NEW
             WorkerStartService workerStartService,
             FileRepository fileRepository,
             CategoryItemRepository categoryItemRepository,
@@ -33,6 +35,7 @@ public class WorkerResultService {
     ) {
         this.textChunkRepository = textChunkRepository;
         this.summaryChunkRepository = summaryChunkRepository;
+        this.temporaryFlashcardRepository = temporaryFlashcardRepository; // NEW
         this.fileRepository = fileRepository;
         this.workerStartService = workerStartService;
         this.categoryItemRepository = categoryItemRepository;
@@ -42,12 +45,9 @@ public class WorkerResultService {
     @Transactional
     public void processTextExtractionResult(Map<String, Object> payload) {
         try {
-            // 1. Extract common IDs (Using safer casting logic)
-            // Handling generic Number helps avoid casting errors if payload sends Integer vs Long
             Long fileId = ((Number) payload.get("fileId")).longValue();
             Integer categoryItemId = ((Number) payload.get("categoryItemId")).intValue();
 
-            // 2. Extract Text Chunks (Preserving HEAD's list handling)
             Object rawValue = payload.get("textChunks");
             List<String> textChunks = new ArrayList<>();
 
@@ -58,34 +58,29 @@ public class WorkerResultService {
                     }
                 }
             } else if (payload.containsKey("textContent")) {
-                // Fallback: If payload matches the Incoming branch format (single string)
                 textChunks.add((String) payload.get("textContent"));
             }
 
             File fileReference = fileRepository.getReferenceById(fileId);
             CategoryItem categoryReference = categoryItemRepository.getReferenceById(categoryItemId);
 
-            // 3. Iterate through chunks to Save and Start Jobs
             for (int i = 0; i < textChunks.size(); i++) {
                 String content = textChunks.get(i);
 
-                // A. Save Text Chunk
                 TextChunk textChunk = new TextChunk(
                         fileReference,
                         categoryReference,
-                        i, // Using loop index as chunkIndex
+                        i,
                         content,
                         (Integer) payload.get("pageStart"),
                         (Integer) payload.get("pageEnd")
                 );
                 textChunkRepository.save(textChunk);
 
-                // B. Create and Save Job for Summary Generation (From Incoming)
                 Job summaryJob = new Job(JobType.SUMMARY_GENERATION, categoryItemId);
                 summaryJob.setFileId(fileId);
                 Job savedJob = jobRepository.save(summaryJob);
 
-                // C. Start Summary Generation Worker (From Incoming)
                 StartSummaryGenerationJobDto jobDto = StartSummaryGenerationJobDto.builder()
                         .jobId(savedJob.getId())
                         .text(content)
@@ -103,55 +98,123 @@ public class WorkerResultService {
 
     @Transactional
     public void processSummaryGenerationResult(Map<String, Object> result) {
-        // 1. Identify Job
-        Integer jobId = null;
-        // Handle potential naming differences in result map
-        if (result.get("original_job_id") != null) {
-            jobId = (Integer) result.get("original_job_id");
-        } else if (result.get("job_id") != null) {
-            jobId = (Integer) result.get("job_id");
+        Job job = getValidJobFromResult(result).orElse(null);
+        if (job == null || !isResultSuccessful(result, job)) return;
+
+        Map<String, Object> payload = getPayload(result);
+        String summaryText = (String) payload.get("summary");
+        Integer chunkNumber = (Integer) payload.get("chunk_number");
+
+        Optional<TextChunk> textChunkOpt = textChunkRepository.findByFile_IdAndChunkIndex(job.getFileId(), chunkNumber);
+
+        if (textChunkOpt.isPresent()) {
+            // 1. Save the Summary
+            SummaryChunk summaryChunk = new SummaryChunk(textChunkOpt.get(), summaryText);
+            summaryChunk = summaryChunkRepository.save(summaryChunk);
+
+            job.setStatus(JobStatus.FINISHED);
+            jobRepository.save(job);
+
+            // 2. TRIGGER FLASHCARD GENERATION
+            // Create a new job for flashcard generation
+            Job flashcardJob = new Job(JobType.FLASHCARD_GENERATION, job.getCategoryItemId());
+            flashcardJob.setFileId(job.getFileId());
+            flashcardJob = jobRepository.save(flashcardJob);
+
+            // Prepare DTO
+            StartFlashcardGenerationJobDto startDto = StartFlashcardGenerationJobDto.builder()
+                    .jobId(flashcardJob.getId())
+                    .summaryChunkId(summaryChunk.getId())
+                    .text(summaryText) // We generate flashcards from the summary
+                    .build();
+
+            // Send to RabbitMQ
+            workerStartService.startFlashcardGenerationJob(startDto);
+
+        } else {
+            job.setStatus(JobStatus.FAILED);
+            jobRepository.save(job);
         }
+    }
 
-        if (jobId == null) return;
+    @Transactional
+    public void processFlashcardGenerationResult(Map<String, Object> result) {
+        Job job = getValidJobFromResult(result).orElse(null);
+        if (job == null || !isResultSuccessful(result, job)) return;
 
-        Job job = jobRepository.findById(jobId).orElse(null);
-        if (job == null) return;
+        Map<String, Object> payload = getPayload(result);
 
-        // 2. Check Status
-        String statusStr = (String) result.get("status");
-        if (!"success".equalsIgnoreCase(statusStr)) {
+        // 1. Get Summary Chunk
+        Integer summaryChunkId = (Integer) payload.get("summary_chunk_id");
+        Optional<SummaryChunk> summaryChunkOpt = summaryChunkRepository.findById(summaryChunkId);
+
+        if (summaryChunkOpt.isEmpty()) {
             job.setStatus(JobStatus.FAILED);
             jobRepository.save(job);
             return;
         }
 
-        // 3. Extract Payload Data
-        Map<String, Object> payload = result;
-        if (result.containsKey("payload") && result.get("payload") instanceof Map) {
-            payload = (Map<String, Object>) result.get("payload");
+        SummaryChunk summaryChunk = summaryChunkOpt.get();
+
+        // 2. Parse Flashcards List
+        Object flashcardsObj = payload.get("flashcards");
+        if (flashcardsObj instanceof List<?>) {
+            List<?> list = (List<?>) flashcardsObj;
+            for (Object item : list) {
+                if (item instanceof Map) {
+                    Map<?, ?> map = (Map<?, ?>) item;
+                    String question = (String) map.get("question");
+                    String answer = (String) map.get("answer");
+
+                    if (question != null && answer != null) {
+                        TemporaryFlashcard tf = new TemporaryFlashcard(summaryChunk, question, answer);
+                        temporaryFlashcardRepository.save(tf);
+                    }
+                }
+            }
         }
 
-        String summaryText = (String) payload.get("summary");
-        Integer chunkNumber = (Integer) payload.get("chunk_number");
-
-        // 4. Find Corresponding TextChunk
-        Optional<TextChunk> textChunkOpt = textChunkRepository.findByFile_IdAndChunkIndex(job.getFileId(), chunkNumber);
-
-        if (textChunkOpt.isPresent()) {
-            // 5. Create and Save SummaryChunk
-            SummaryChunk summaryChunk = new SummaryChunk(textChunkOpt.get(), summaryText);
-            summaryChunkRepository.save(summaryChunk);
-            job.setStatus(JobStatus.FINISHED);
-        } else {
-            job.setStatus(JobStatus.FAILED); // Could not link to text chunk
-        }
-
+        // 3. Finish Job
+        job.setStatus(JobStatus.FINISHED);
         jobRepository.save(job);
-    }
 
-    public void processFlashcardGenerationResult(Map<String, Object> result) {
+        // Note: Aggregation Trigger logic would go here if needed later
     }
 
     public void processAggregationResult(Map<String, Object> result) {
+        // Implementation for aggregation result
+    }
+
+    // Helper methods to handle inconsistent map keys if necessary
+    private Integer getJobId(Map<String, Object> result) {
+        if (result.get("original_job_id") != null) {
+            return (Integer) result.get("original_job_id");
+        } else if (result.get("job_id") != null) {
+            return (Integer) result.get("job_id");
+        }
+        return null;
+    }
+
+    private Map<String, Object> getPayload(Map<String, Object> result) {
+        if (result.containsKey("payload") && result.get("payload") instanceof Map) {
+            return (Map<String, Object>) result.get("payload");
+        }
+        return result;
+    }
+
+    private Optional<Job> getValidJobFromResult(Map<String, Object> result) {
+        return Optional.ofNullable(getJobId(result))
+                .flatMap(jobRepository::findById);
+    }
+
+    private boolean isResultSuccessful(Map<String, Object> result, Job job) {
+        String statusStr = (String) result.get("status");
+        if ("success".equalsIgnoreCase(statusStr)) {
+            return true;
+        }
+
+        job.setStatus(JobStatus.FAILED);
+        jobRepository.save(job);
+        return false;
     }
 }

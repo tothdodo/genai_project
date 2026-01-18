@@ -54,7 +54,7 @@ def validate_request(json_req):
     return True
 
 
-def process_req(ch, method, properties, body):
+def process_req(ch, body):
     start_time = time.time()
 
     try:
@@ -121,8 +121,8 @@ def main():
     logging.info("Summary Generation Worker Started!")
     channel = connect_rabbitmq()
 
-    def callback(ch, method, properties, body):
-        process_req(ch, method, properties, body)
+    def callback(ch, body):
+        process_req(ch, body)
 
     # Using the queue name from definitions.json
     queue_name = "worker.summary.generation.job"

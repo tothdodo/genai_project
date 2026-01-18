@@ -53,14 +53,24 @@ class ResultPublisher:
     #     self._publish(rabbitConfig.routing_chunking_comparison_result, payload, rabbitConfig.routing_chunking_comparison_result,status=status)
 
     def publish_summary_result(self, payload: dict, original_job_id: str, status: str = "unknown"):
-        routing_key = "worker.summary.generation.result"
+        routing_key = rabbitConfig.routing_summary_generation_result
 
         self._publish(
             routing_key=routing_key,
             payload=payload,
             msg_type=routing_key,
             status=status,
-            job_id_override=original_job_id  # Pass the ID to link request to result
+            job_id_override=original_job_id
+        )
+
+    def publish_flashcard_result(self, payload: dict, original_job_id: str, status: str = "unknown"):
+        routing_key = rabbitConfig.routing_flashcard_generation_result
+        self._publish(
+            routing_key=routing_key,
+            payload=payload,
+            msg_type=routing_key,
+            status=status,
+            job_id_override=original_job_id
         )
 
     def close(self):
