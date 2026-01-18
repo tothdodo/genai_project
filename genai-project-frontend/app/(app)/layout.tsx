@@ -87,7 +87,7 @@ export default function AppLayout({
                                     if (category.id === categoryIdToAddItem) {
                                         return {
                                             ...category,
-                                            categoryItems: [...(category.categoryItems || []), newCategoryItem],
+                                            categoryItems: [newCategoryItem, ...(category.categoryItems || [])],
                                         };
                                     }
                                     return category;

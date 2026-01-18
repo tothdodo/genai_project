@@ -126,6 +126,8 @@ services:
       context: ./genai-project-worker
       dockerfile: Dockerfile-text-extraction-worker
     container_name: text-extraction-worker
+    volumes:
+      - "./data/text_extraction_worker:/data/text_chunks"
     env_file:
       - .env
     depends_on:
