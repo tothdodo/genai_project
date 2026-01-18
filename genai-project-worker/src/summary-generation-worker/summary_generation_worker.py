@@ -4,8 +4,6 @@ import sys
 import time
 import json
 import argparse
-import os
-import google.generativeai as genai
 
 from jsonschema.exceptions import ValidationError
 from jsonschema.validators import validate
@@ -17,9 +15,6 @@ from messaging.result_publisher import ResultPublisher
 from schemas.summary_generation import schema as summary_generation_schema
 from util.gemini_client import GeminiClient
 
-# --- Gemini Configuration ---
-# Configure the API with your key
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
 SUMMARY_PROMPT = """
 Summarize the following content clearly and concisely.
@@ -133,7 +128,6 @@ def main():
     queue_name = "worker.summary.generation.job"
 
     # Ensure this matches your rabbit_config.queue_summary_generation_job
-    # If rabbitConfig is used, ensure it maps to the string above.
     channel.basic_consume(queue=queue_name, on_message_callback=callback, auto_ack=True)
 
     logging.info(f"Waiting for messages on {queue_name}")

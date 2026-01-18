@@ -3,12 +3,12 @@ schema = {
     "required": ["job_id", "category_id", "text"],
     "properties": {
         "job_id": {
-            "type": "string",
-            "minLength": 1
+            "type": "integer",
+            "minimum": 0
         },
         "category_id": {
             "type": "integer",
-            "minimum": 1
+            "minimum": 0
         },
         "text": {
             "type": "string",
@@ -16,7 +16,7 @@ schema = {
         },
         "chunk_number": {
             "type": "integer",
-            "minimum": 1
+            "minimum": 0
         }
     }
 }
