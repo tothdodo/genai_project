@@ -8,7 +8,10 @@ import genai.genaiprojectbackend.repository.FileRepository;
 import genai.genaiprojectbackend.repository.TextChunkRepository;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
+import java.util.stream.IntStream;
 
 @Service
 public class WorkerResultService {
@@ -21,28 +24,49 @@ public class WorkerResultService {
             TextChunkRepository textChunkRepository,
             WorkerStartService workerStartService,
             FileRepository fileRepository,
-            CategoryItemRepository categoryItemRepository
-    ) {
+            CategoryItemRepository categoryItemRepository) {
         this.textChunkRepository = textChunkRepository;
         this.fileRepository = fileRepository;
         this.workerStartService = workerStartService;
         this.categoryItemRepository = categoryItemRepository;
     }
 
-    public void processTextExtractionResult(Map<String, Object> result) {
-        // Save chunked text
-        TextChunk textChunk = new TextChunk(
-                fileRepository.getReferenceById((Long) result.get("fileId")),
-                categoryItemRepository.getReferenceById((Integer) result.get("categoryItemId")),
-                (Integer) result.get("chunkIndex"),
-                (String) result.get("textContent"),
-                (Integer) result.get("pageStart"),
-                (Integer) result.get("pageEnd")
-        );
-        textChunkRepository.save(textChunk);
+    public void processTextExtractionResult(Map<String, Object> payload) {
+        try {
+            // Save chunked text
+            Object rawValue = payload.get("textChunks");
+            List<String> textChunks = new ArrayList<>();
 
-        // Start Summary Generation Job
-        //workerStartService.startSummaryGenerationJob();
+            if (rawValue instanceof List<?>) {
+                for (Object obj : (List<?>) rawValue) {
+                    if (obj instanceof String) {
+                        textChunks.add((String) obj);
+                    }
+                }
+            }
+            Long fileId = Long.valueOf(String.valueOf(payload.get("fileId")));
+            Integer categoryItemId = Integer.valueOf(String.valueOf(payload.get("categoryItemId")));
+            File file = fileRepository.getReferenceById(fileId);
+            CategoryItem categoryItem = categoryItemRepository.getReferenceById(categoryItemId);
+
+            List<TextChunk> newTextChunks = IntStream.range(0, textChunks.size())
+                    .mapToObj(i -> new TextChunk(
+                            file,
+                            categoryItem,
+                            i,
+                            textChunks.get(i),
+                            // Todo: Do we need these?
+                            (Integer) payload.get("pageStart"),
+                            (Integer) payload.get("pageEnd")))
+                    .toList();
+
+            textChunkRepository.saveAll(newTextChunks);
+            // Todo: Start Summary Generation Job for each chunk
+            // for all chunk in newTextChunks
+            // workerStartService.startSummaryGenerationJob();
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
     }
 
     public void processSummaryGenerationResult(Map<String, Object> result) {
