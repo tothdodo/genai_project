@@ -1,9 +1,8 @@
+import json
 import logging
 import signal
 import sys
 import time
-import json
-import argparse
 
 from jsonschema.exceptions import ValidationError
 from jsonschema.validators import validate
@@ -26,6 +25,9 @@ TEXT:
 """
 
 rabbitConfig = get_rabbitmq_config()
+
+DEFAULT_MODEL = "gemini-flash-latest"
+FALLBACK_MODEL = "gemini-2.0-flash"
 
 
 def handle_sigterm(signum, frame):
@@ -81,27 +83,45 @@ def process_req(ch, method, properties, body):
         status = "unknown"
         flashcards_list = []
 
+        max_attempts = 3
+
         try:
             gemini_client = GeminiClient()
-            formatted_prompt = FLASHCARD_PROMPT.format(text=input_text)
+        except Exception as e:
+            logging.error(f"Failed to instantiate GeminiClient: {e}")
+            return
 
-            # Call Gemini
-            raw_response = gemini_client.generate_content(formatted_prompt)
+        for attempt in range(max_attempts):
+            try:
+                current_model = DEFAULT_MODEL
+                if attempt == 2:
+                    logging.info(f"Attempt {attempt + 1}: Retrying with fallback model {FALLBACK_MODEL}...")
+                    current_model = FALLBACK_MODEL
 
-            # Clean and Parse JSON
-            cleaned_response = clean_json_response(raw_response)
-            flashcards_list = json.loads(cleaned_response)
+                formatted_prompt = FLASHCARD_PROMPT.format(text=input_text)
 
-            if isinstance(flashcards_list, list):
-                status = "success"
-            else:
-                logging.error("Gemini response was not a JSON list")
-                status = "failed"
-                flashcards_list = []
+                raw_response = gemini_client.generate_content(formatted_prompt, model_name=current_model)
 
-        except Exception as api_error:
-            logging.error(f"Gemini/Parsing Error: {api_error}")
-            status = "failed"
+                cleaned_response = clean_json_response(raw_response)
+                flashcards_list = json.loads(cleaned_response)
+
+                if isinstance(flashcards_list, list):
+                    status = "success"
+                    break
+                else:
+                    logging.error(f"Gemini response was not a JSON list (Attempt {attempt + 1})")
+                    if attempt == max_attempts - 1:
+                        status = "failed"
+                        flashcards_list = []
+                    else:
+                        raise ValueError("Invalid JSON response")
+
+            except Exception as api_error:
+                logging.error(f"Gemini/Parsing Error (Attempt {attempt + 1}): {api_error}")
+                if attempt == max_attempts - 1:
+                    status = "failed"
+                else:
+                    time.sleep(2)
 
         result_payload = {
             "flashcards": flashcards_list,

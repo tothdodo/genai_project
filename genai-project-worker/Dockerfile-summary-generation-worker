@@ -1,8 +1,5 @@
 FROM python:3.12-slim
 
-# Set the environment variable
-ENV GEMINI_API_KEY=paste_api_key_here
-
 COPY src/summary-generation-worker /app
 COPY src/schemas /app/schemas
 COPY src/util /app/util

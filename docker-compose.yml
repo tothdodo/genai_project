@@ -88,6 +88,8 @@ services:
       context: ./genai-project-worker
       dockerfile: Dockerfile-flashcard-generation-worker
     container_name: flashcard-generation-worker
+    env_file:
+      - .env
     depends_on:
       minio:
         condition: service_started
@@ -107,6 +109,8 @@ services:
       context: ./genai-project-worker
       dockerfile: Dockerfile-summary-generation-worker
     container_name: summary-generation-worker
+    env_file:
+      - .env
     depends_on:
       minio:
         condition: service_started
@@ -149,6 +153,8 @@ services:
       context: ./genai-project-worker
       dockerfile: Dockerfile-aggregation-worker
     container_name: aggregation-worker
+    env_file:
+      - .env
     depends_on:
       minio:
         condition: service_started
