@@ -14,11 +14,14 @@ from messaging.result_publisher import ResultPublisher
 from schemas.flashcard_generation import schema as flashcard_generation_schema
 from util.gemini_client import GeminiClient
 
-FLASHCARD_PROMPT = """
+FLASHCARD_PROMPT = r"""
 You are a flashcard generator. Create a list of flashcards based on the provided text.
 The output must be a valid JSON list of objects.
 Each object must have exactly two keys: "question" and "answer".
+IMPORTANT: The text may contain LaTeX formatting. You must escape all backslashes in your JSON output (e.g., write "\\pi" instead of "\pi").
 Do not include markdown formatting (like ```json). Just return the raw JSON string.
+
+{feedback}
 
 TEXT:
 {text}
@@ -84,6 +87,7 @@ def process_req(ch, method, properties, body):
         flashcards_list = []
 
         max_attempts = 3
+        last_error = None
 
         try:
             gemini_client = GeminiClient()
@@ -98,7 +102,15 @@ def process_req(ch, method, properties, body):
                     logging.info(f"Attempt {attempt + 1}: Retrying with fallback model {FALLBACK_MODEL}...")
                     current_model = FALLBACK_MODEL
 
-                formatted_prompt = FLASHCARD_PROMPT.format(text=input_text)
+                feedback_str = ""
+                if last_error:
+                    feedback_str = f"PREVIOUS ATTEMPT FAILED. ERROR: {last_error}. PLEASE FIX THE JSON STRUCTURE."
+                    logging.info(f"Retrying with error context: {last_error}")
+
+                formatted_prompt = FLASHCARD_PROMPT.format(
+                    text=input_text,
+                    feedback=feedback_str
+                )
 
                 raw_response = gemini_client.generate_content(formatted_prompt, model_name=current_model)
 
@@ -109,15 +121,21 @@ def process_req(ch, method, properties, body):
                     status = "success"
                     break
                 else:
-                    logging.error(f"Gemini response was not a JSON list (Attempt {attempt + 1})")
+                    error_msg = "Output parsed as valid JSON but was not a list."
+                    logging.error(f"{error_msg} (Attempt {attempt + 1})")
+                    last_error = error_msg
+
                     if attempt == max_attempts - 1:
                         status = "failed"
                         flashcards_list = []
                     else:
-                        raise ValueError("Invalid JSON response")
+                        raise ValueError(error_msg)
 
-            except Exception as api_error:
-                logging.error(f"Gemini/Parsing Error (Attempt {attempt + 1}): {api_error}")
+            except Exception as api_or_json_error:
+                # Capture the actual exception message (e.g., "Expecting value: line 1 column 1")
+                last_error = str(api_or_json_error)
+                logging.error(f"Gemini/Parsing Error (Attempt {attempt + 1}): {last_error}")
+
                 if attempt == max_attempts - 1:
                     status = "failed"
                 else:

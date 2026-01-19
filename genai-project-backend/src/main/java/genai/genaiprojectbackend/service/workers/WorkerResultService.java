@@ -1,8 +1,10 @@
 package genai.genaiprojectbackend.service.workers;
 
+import genai.genaiprojectbackend.model.dtos.StartAggregationJobDto;
 import genai.genaiprojectbackend.model.dtos.StartFlashcardGenerationJobDto;
 import genai.genaiprojectbackend.model.dtos.StartSummaryGenerationJobDto;
 import genai.genaiprojectbackend.model.entities.*;
+import genai.genaiprojectbackend.model.enums.CategoryItemStatus;
 import genai.genaiprojectbackend.model.enums.JobStatus;
 import genai.genaiprojectbackend.model.enums.JobType;
 import genai.genaiprojectbackend.repository.*;
@@ -19,27 +21,33 @@ public class WorkerResultService {
     private final WorkerStartService workerStartService;
     private final TextChunkRepository textChunkRepository;
     private final SummaryChunkRepository summaryChunkRepository;
-    private final TemporaryFlashcardRepository temporaryFlashcardRepository; // NEW
+    private final TemporaryFlashcardRepository temporaryFlashcardRepository;
     private final FileRepository fileRepository;
     private final CategoryItemRepository categoryItemRepository;
     private final JobRepository jobRepository;
+    private final FinalSummaryRepository finalSummaryRepository;
+    private final FinalFlashcardRepository finalFlashcardRepository;
 
     public WorkerResultService(
             TextChunkRepository textChunkRepository,
             SummaryChunkRepository summaryChunkRepository,
-            TemporaryFlashcardRepository temporaryFlashcardRepository, // NEW
+            TemporaryFlashcardRepository temporaryFlashcardRepository,
             WorkerStartService workerStartService,
             FileRepository fileRepository,
             CategoryItemRepository categoryItemRepository,
-            JobRepository jobRepository
+            JobRepository jobRepository,
+            FinalSummaryRepository finalSummaryRepository,
+            FinalFlashcardRepository finalFlashcardRepository
     ) {
         this.textChunkRepository = textChunkRepository;
         this.summaryChunkRepository = summaryChunkRepository;
-        this.temporaryFlashcardRepository = temporaryFlashcardRepository; // NEW
+        this.temporaryFlashcardRepository = temporaryFlashcardRepository;
         this.fileRepository = fileRepository;
         this.workerStartService = workerStartService;
         this.categoryItemRepository = categoryItemRepository;
         this.jobRepository = jobRepository;
+        this.finalSummaryRepository = finalSummaryRepository;
+        this.finalFlashcardRepository = finalFlashcardRepository;
     }
 
     @Transactional
@@ -178,11 +186,103 @@ public class WorkerResultService {
         job.setStatus(JobStatus.FINISHED);
         jobRepository.save(job);
 
-        // Note: Aggregation Trigger logic would go here if needed later
+        checkAndStartAggregation(job.getFileId(), job.getCategoryItemId());
     }
 
+    private void checkAndStartAggregation(Long fileId, Integer categoryItemId) {
+        // Check if there are any pending or in-progress jobs for this file
+        long pendingJobs = jobRepository.countByFileIdAndStatusIn(
+                fileId,
+                List.of(JobStatus.PENDING, JobStatus.IN_PROGRESS)
+        );
+
+        if (pendingJobs == 0) {
+            // All chunks are processed. Start Aggregation.
+            List<SummaryChunk> summaries = summaryChunkRepository.findAllByTextChunk_File_Id(fileId);
+            List<String> summaryTexts = summaries.stream().map(SummaryChunk::getSummaryText).toList();
+
+            // Fetch Temporary Flashcards
+            List<TemporaryFlashcard> tempFlashcards = temporaryFlashcardRepository.findAllBySummaryChunk_TextChunk_File_Id(fileId);
+            List<Map<String, String>> flashcardMaps = tempFlashcards.stream()
+                    .map(f -> Map.of("question", f.getQuestion(), "answer", f.getAnswer()))
+                    .toList();
+
+            Job aggJob = new Job(JobType.AGGREGATION, categoryItemId);
+            aggJob.setFileId(fileId);
+            aggJob = jobRepository.save(aggJob);
+
+            StartAggregationJobDto dto = StartAggregationJobDto.builder()
+                    .jobId(aggJob.getId())
+                    .categoryItemId(categoryItemId)
+                    .fileId(fileId)
+                    .summaries(summaryTexts)
+                    .flashcards(flashcardMaps)
+                    .build();
+
+            workerStartService.startAggregationJob(dto);
+        }
+    }
+
+    @Transactional
     public void processAggregationResult(Map<String, Object> result) {
-        // Implementation for aggregation result
+        Job job = getValidJobFromResult(result).orElse(null);
+        if (job == null || !isResultSuccessful(result, job)) return;
+
+        Map<String, Object> payload = getPayload(result);
+        String finalSummaryText = (String) payload.get("final_summary");
+
+        // Ensure we have the necessary IDs
+        if (job.getFileId() == null || job.getCategoryItemId() == null) {
+            job.setStatus(JobStatus.FAILED);
+            jobRepository.save(job);
+            return;
+        }
+
+        File file = fileRepository.findById(job.getFileId()).orElse(null);
+        CategoryItem categoryItem = categoryItemRepository.findById(job.getCategoryItemId()).orElse(null);
+
+        if (file != null && categoryItem != null) {
+            // 1. Save Final Summary
+            FinalSummary finalSummary = new FinalSummary(finalSummaryText, categoryItem);
+            finalSummaryRepository.save(finalSummary);
+
+            // 2. Save Final Flashcards
+            Object finalFlashcardsObj = payload.get("final_flashcards");
+            if (finalFlashcardsObj instanceof List<?>) {
+                List<?> list = (List<?>) finalFlashcardsObj;
+                for (Object item : list) {
+                    if (item instanceof Map) {
+                        Map<?, ?> map = (Map<?, ?>) item;
+                        String question = (String) map.get("question");
+                        String answer = (String) map.get("answer");
+
+                        if (question != null && answer != null) {
+                            FinalFlashcard ff = new FinalFlashcard(file, question, answer, categoryItem);
+                            finalFlashcardRepository.save(ff);
+                        }
+                    }
+                }
+            }
+
+            // 3. Cleanup Temporary Tables
+            temporaryFlashcardRepository.deleteAll(
+                    temporaryFlashcardRepository.findAllBySummaryChunk_TextChunk_File_Id(file.getId())
+            );
+            summaryChunkRepository.deleteAll(
+                    summaryChunkRepository.findAllByTextChunk_File_Id(file.getId())
+            );
+
+            // Finishing Job
+            job.setStatus(JobStatus.FINISHED);
+            jobRepository.save(job);
+
+            // Mark CategoryItem as COMPLETED
+            categoryItem.setStatus(CategoryItemStatus.COMPLETED);
+            categoryItemRepository.save(categoryItem);
+        } else {
+            job.setStatus(JobStatus.FAILED);
+            jobRepository.save(job);
+        }
     }
 
     // Helper methods to handle inconsistent map keys if necessary
