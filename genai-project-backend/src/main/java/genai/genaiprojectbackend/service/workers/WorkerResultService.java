@@ -45,8 +45,8 @@ public class WorkerResultService {
     @Transactional
     public void processTextExtractionResult(Map<String, Object> payload) {
         try {
-            Long fileId = ((Number) payload.get("fileId")).longValue();
-            Integer categoryItemId = ((Number) payload.get("categoryItemId")).intValue();
+            Long fileId = Long.valueOf(String.valueOf(payload.get("fileId")));
+            Integer categoryItemId = Integer.valueOf(String.valueOf(payload.get("categoryItemId")));
 
             Object rawValue = payload.get("textChunks");
             List<String> textChunks = new ArrayList<>();

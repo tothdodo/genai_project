@@ -235,9 +235,13 @@ def main():
     def callback(ch, method, properties, body):
         process_req(ch, method, properties, body)
 
-    channel.basic_consume(queue=rabbitConfig.queue_text_extraction_job, on_message_callback=callback, auto_ack=True)
+    # Using the queue name from definitions.json
+    queue_name = "worker.text.extraction.job"
 
-    logging.info("Waiting for messages")
+    # Ensure this matches your rabbit_config.queue_summary_generation_job
+    channel.basic_consume(queue=queue_name, on_message_callback=callback, auto_ack=True)
+
+    logging.info(f"Waiting for messages on {queue_name}")
     try:
         channel.start_consuming()
     except KeyboardInterrupt:
