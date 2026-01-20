@@ -18,8 +18,7 @@ public class WorkerResultListener {
 
     @RabbitListener(queues = RabbitConfig.WORKER_TEXT_EXTRACTION_RESULT_QUEUE)
     public void handleTextExtractionResult(Map<String, Object> result) {
-        Map<String, Object> payload = (Map<String, Object>) result.get("payload");
-        workerResultService.processTextExtractionResult(payload);
+        workerResultService.processTextExtractionResult(result);
     }
 
     @RabbitListener(queues = RabbitConfig.WORKER_SUMMARY_GENERATION_RESULT_QUEUE)

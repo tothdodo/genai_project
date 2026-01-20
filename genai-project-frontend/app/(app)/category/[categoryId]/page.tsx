@@ -15,7 +15,7 @@ export default async function CategoryPage(props: { params: Params }) {
     if (!category) return notFound();
 
     return (
-        <Card className="p-4 max-w-4xl">
+        <Card className="p-4 w-3/4">
             <div>
                 <h1 className="text-2xl font-semibold tracking-tight">
                     {category.name}

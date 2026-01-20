@@ -43,8 +43,14 @@ public class WorkerResultService {
     }
 
     @Transactional
-    public void processTextExtractionResult(Map<String, Object> payload) {
+    public void processTextExtractionResult(Map<String, Object> result) {
         try {
+            Map<String, Object> payload = (Map<String, Object>) result.get("payload");
+            Job job = getValidJobFromResult(result).orElse(null);
+            if (job == null || !isResultSuccessful(result, job)) return;
+            job.setStatus(JobStatus.FINISHED);
+            jobRepository.save(job);
+
             Long fileId = Long.valueOf(String.valueOf(payload.get("fileId")));
             Integer categoryItemId = Integer.valueOf(String.valueOf(payload.get("categoryItemId")));
 

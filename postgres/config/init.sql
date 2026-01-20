@@ -111,14 +111,11 @@ CREATE TABLE final_flashcards (
 
 -- Created from summary chunks by aggregate worker, linked to files and category items
 CREATE TABLE final_summaries (
-    file_id             INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+    id                  INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
     summary_text        TEXT NOT NULL,
     created_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    category_item_id    INTEGER,
+    category_item_id    INTEGER UNIQUE,
 
-    CONSTRAINT fk_final_summary_file
-        FOREIGN KEY (file_id) REFERENCES files(id),
-        
     CONSTRAINT fk_category_item_id
         FOREIGN KEY (category_item_id) REFERENCES category_items(id) ON DELETE SET NULL
 );

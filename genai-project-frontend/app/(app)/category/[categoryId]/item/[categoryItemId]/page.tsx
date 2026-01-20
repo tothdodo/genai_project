@@ -14,8 +14,6 @@ export default async function CategoryItemPage(props: { params: Params }) {
 
     if (!categoryItem) return notFound();
 
-    console.log("Category Item Details:", categoryItem);
-
     return (
         <CategoryItemClient initialItem={categoryItem} />
     );
