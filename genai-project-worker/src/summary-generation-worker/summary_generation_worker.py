@@ -7,7 +7,7 @@ import argparse
 
 from jsonschema.exceptions import ValidationError
 from jsonschema.validators import validate
-from pika.exceptions import ChannelWrongStateError, ReentrancyError, StreamLostError
+from pika.exceptions import ChannelWrongStateError, ReentrancyError, StreamLostError, AMQPError
 
 from messaging.rabbit_config import get_rabbitmq_config
 from messaging.rabbit_connect import create_rabbit_con_and_return_channel
@@ -64,6 +64,13 @@ def validate_request(json_req):
 def process_req(ch, method, properties, body):
     start_time = time.time()
 
+    def safe_ack():
+        try:
+            ch.basic_ack(delivery_tag=method.delivery_tag)
+        except (AMQPError, Exception) as ack_e:
+            logging.warning(f"Could not ack message (Connection likely timed out during processing): {ack_e}")
+            # Note: If ack fails, RabbitMQ will redeliver the message.
+
     try:
         # 1. Parse Body
         request = json.loads(body)
@@ -72,6 +79,7 @@ def process_req(ch, method, properties, body):
         # 2. Validate Schema
         if not validate_request(request):
             logging.error("Validation failed. Dropping message.")
+            safe_ack()
             return
 
         # 3. Extract Fields
@@ -82,6 +90,7 @@ def process_req(ch, method, properties, body):
 
         if not input_text or not job_id:
             logging.error("Missing 'text' or 'job_id' in payload.")
+            safe_ack()
             return
 
         # 4. Generate Summary via Gemini
@@ -93,15 +102,17 @@ def process_req(ch, method, properties, body):
             gemini_client = GeminiClient()
         except Exception as e:
             logging.error(f"Failed to instantiate GeminiClient: {e}")
+            # If client fails (e.g. no API key), we ack to avoid infinite retry loop
+            safe_ack()
             return
 
-        max_attempts = 3
+        max_attempts = 5
         last_error = None
 
         for attempt in range(max_attempts):
             try:
                 current_model = DEFAULT_MODEL
-                if attempt == 2:
+                if attempt == 3:
                     logging.info(f"Attempt {attempt + 1}: Retrying with fallback model {FALLBACK_MODEL}...")
                     current_model = FALLBACK_MODEL
 
@@ -127,7 +138,7 @@ def process_req(ch, method, properties, body):
                     status = "failed"
                     summary_text = "Error generating summary."
                 else:
-                    time.sleep(2)
+                    time.sleep(5)
 
         # 5. Prepare Result Payload
         result_payload = {
@@ -137,21 +148,37 @@ def process_req(ch, method, properties, body):
             "duration": time.time() - start_time
         }
 
-        # 6. Publish Result
-        # Initialize publisher with the existing channel to reuse the connection
-        publisher = ResultPublisher(ch)
-        publisher.publish_summary_result(
-            payload=result_payload,
-            original_job_id=job_id,
-            status=status
-        )
+        # 6. Publish Result (Using Fresh Connection)
+        try:
+            # We open a NEW connection just for publishing to avoid 'ConnectionResetError'
+            # if the original consumer connection 'ch' timed out during the long AI processing.
+            pub_channel = create_rabbit_con_and_return_channel()
+            publisher = ResultPublisher(pub_channel)
+            publisher.publish_summary_result(
+                payload=result_payload,
+                original_job_id=job_id,
+                status=status
+            )
 
-        logging.info(f"Job {job_id} completed. Status: {status}. Time: {time.time() - start_time:.2f}s")
+            # Critical: Close the temporary connection
+            if pub_channel.connection and pub_channel.connection.is_open:
+                pub_channel.connection.close()
+
+            logging.info(f"Job {job_id} completed. Status: {status}. Time: {time.time() - start_time:.2f}s")
+        except Exception as pub_error:
+            logging.error(f"Failed to publish result for Job {job_id}: {pub_error}")
+            # If publishing fails, we probably shouldn't Ack, so RabbitMQ retries the whole job.
+            return
+
+        # 7. Acknowledge Original Message
+        safe_ack()
 
     except json.JSONDecodeError:
         logging.error("Failed to decode JSON body")
+        safe_ack()
     except Exception as e:
         logging.error(f"Unexpected error in process_req: {e}")
+        # In case of unexpected crash, we generally do NOT ack so it retries.
 
 
 def main():
@@ -165,7 +192,8 @@ def main():
     queue_name = "worker.summary.generation.job"
 
     # Ensure this matches your rabbit_config.queue_summary_generation_job
-    channel.basic_consume(queue=queue_name, on_message_callback=callback, auto_ack=True)
+    # CHANGE: auto_ack set to False so we don't lose jobs if the worker crashes
+    channel.basic_consume(queue=queue_name, on_message_callback=callback, auto_ack=False)
 
     logging.info(f"Waiting for messages on {queue_name}")
     try:

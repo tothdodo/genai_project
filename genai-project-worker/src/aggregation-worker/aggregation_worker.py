@@ -129,13 +129,13 @@ def process_req(ch, method, properties, body):
         # ---------------------------------------------------------
         # 1. Generate Final Summary
         # ---------------------------------------------------------
-        max_attempts = 3
+        max_attempts = 5
         last_error = None
 
         for attempt in range(max_attempts):
             try:
                 current_model = DEFAULT_MODEL
-                if attempt == 2:
+                if attempt == 3:
                     current_model = FALLBACK_MODEL
 
                 feedback_str = ""
@@ -159,7 +159,7 @@ def process_req(ch, method, properties, body):
                     status = "failed"
                     final_summary = "Error generating final summary."
                 else:
-                    time.sleep(2)
+                    time.sleep(5)
 
         # ---------------------------------------------------------
         # 2. Generate Final Flashcards
@@ -171,7 +171,7 @@ def process_req(ch, method, properties, body):
             for attempt in range(max_attempts):
                 try:
                     current_model = DEFAULT_MODEL
-                    if attempt == 2:
+                    if attempt == 3:
                         current_model = FALLBACK_MODEL
 
                     feedback_str = ""
@@ -200,7 +200,7 @@ def process_req(ch, method, properties, body):
                 except Exception as api_or_json_error:
                     last_error = str(api_or_json_error)
                     logging.error(f"Gemini API/Parsing Error during Flashcard Aggregation (Attempt {attempt + 1}): {last_error}")
-                    time.sleep(2)
+                    time.sleep(5)
 
         result_payload = {
             "final_summary": final_summary,

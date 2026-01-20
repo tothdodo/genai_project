@@ -172,11 +172,9 @@ public class WorkerResultService {
 
         // 2. Parse Flashcards List
         Object flashcardsObj = payload.get("flashcards");
-        if (flashcardsObj instanceof List<?>) {
-            List<?> list = (List<?>) flashcardsObj;
+        if (flashcardsObj instanceof List<?> list) {
             for (Object item : list) {
-                if (item instanceof Map) {
-                    Map<?, ?> map = (Map<?, ?>) item;
+                if (item instanceof Map<?, ?> map) {
                     String question = (String) map.get("question");
                     String answer = (String) map.get("answer");
 
@@ -192,35 +190,44 @@ public class WorkerResultService {
         job.setStatus(JobStatus.FINISHED);
         jobRepository.save(job);
 
-        checkAndStartAggregation(job.getFileId(), job.getCategoryItemId());
+        checkAndStartAggregation(job.getCategoryItemId());
     }
 
-    private void checkAndStartAggregation(Long fileId, Integer categoryItemId) {
-        // Check if there are any pending or in-progress jobs for this file
-        long pendingJobs = jobRepository.countByFileIdAndStatusIn(
-                fileId,
+    /**
+     * Checks if ALL jobs for a specific CategoryItem are finished.
+     * If so, starts the Aggregation Job for the entire CategoryItem.
+     */
+    private void checkAndStartAggregation(Integer categoryItemId) {
+        // Check if there are any pending or in-progress jobs for this Category Item (across ALL files)
+        long pendingJobs = jobRepository.countByCategoryItemIdAndStatusIn(
+                categoryItemId,
                 List.of(JobStatus.PENDING, JobStatus.IN_PROGRESS)
         );
 
         if (pendingJobs == 0) {
-            // All chunks are processed. Start Aggregation.
-            List<SummaryChunk> summaries = summaryChunkRepository.findAllByTextChunk_File_Id(fileId);
+            // 1. Fetch ALL summaries for this Category Item
+            List<SummaryChunk> summaries = summaryChunkRepository.findAllByTextChunk_File_CategoryItem_Id(categoryItemId);
             List<String> summaryTexts = summaries.stream().map(SummaryChunk::getSummaryText).toList();
 
-            // Fetch Temporary Flashcards
-            List<TemporaryFlashcard> tempFlashcards = temporaryFlashcardRepository.findAllBySummaryChunk_TextChunk_File_Id(fileId);
+            // 2. Fetch ALL Temporary Flashcards for this Category Item
+            List<TemporaryFlashcard> tempFlashcards = temporaryFlashcardRepository.findAllBySummaryChunk_TextChunk_File_CategoryItem_Id(categoryItemId);
             List<Map<String, String>> flashcardMaps = tempFlashcards.stream()
                     .map(f -> Map.of("question", f.getQuestion(), "answer", f.getAnswer()))
                     .toList();
 
+            if (summaryTexts.isEmpty() && flashcardMaps.isEmpty()) {
+                // Nothing to aggregate
+                return;
+            }
+
             Job aggJob = new Job(JobType.AGGREGATION, categoryItemId);
-            aggJob.setFileId(fileId);
+            aggJob.setFileId(null);
             aggJob = jobRepository.save(aggJob);
 
             StartAggregationJobDto dto = StartAggregationJobDto.builder()
                     .jobId(aggJob.getId())
                     .categoryItemId(categoryItemId)
-                    .fileId(fileId)
+                    .fileId(null)
                     .summaries(summaryTexts)
                     .flashcards(flashcardMaps)
                     .build();
@@ -237,45 +244,41 @@ public class WorkerResultService {
         Map<String, Object> payload = getPayload(result);
         String finalSummaryText = (String) payload.get("final_summary");
 
-        // Ensure we have the necessary IDs
-        if (job.getFileId() == null || job.getCategoryItemId() == null) {
+        if (job.getCategoryItemId() == null) {
             job.setStatus(JobStatus.FAILED);
             jobRepository.save(job);
             return;
         }
 
-        File file = fileRepository.findById(job.getFileId()).orElse(null);
         CategoryItem categoryItem = categoryItemRepository.findById(job.getCategoryItemId()).orElse(null);
 
-        if (file != null && categoryItem != null) {
+        if (categoryItem != null) {
             // 1. Save Final Summary
             FinalSummary finalSummary = new FinalSummary(finalSummaryText, categoryItem);
             finalSummaryRepository.save(finalSummary);
 
             // 2. Save Final Flashcards
             Object finalFlashcardsObj = payload.get("final_flashcards");
-            if (finalFlashcardsObj instanceof List<?>) {
-                List<?> list = (List<?>) finalFlashcardsObj;
+            if (finalFlashcardsObj instanceof List<?> list) {
                 for (Object item : list) {
-                    if (item instanceof Map) {
-                        Map<?, ?> map = (Map<?, ?>) item;
+                    if (item instanceof Map<?, ?> map) {
                         String question = (String) map.get("question");
                         String answer = (String) map.get("answer");
 
                         if (question != null && answer != null) {
-                            FinalFlashcard ff = new FinalFlashcard(file, question, answer, categoryItem);
+                            FinalFlashcard ff = new FinalFlashcard(question, answer, categoryItem);
                             finalFlashcardRepository.save(ff);
                         }
                     }
                 }
             }
 
-            // 3. Cleanup Temporary Tables
+            // 3. Cleanup Temporary Tables for the WHOLE CategoryItem
             temporaryFlashcardRepository.deleteAll(
-                    temporaryFlashcardRepository.findAllBySummaryChunk_TextChunk_File_Id(file.getId())
+                    temporaryFlashcardRepository.findAllBySummaryChunk_TextChunk_File_CategoryItem_Id(categoryItem.getId())
             );
             summaryChunkRepository.deleteAll(
-                    summaryChunkRepository.findAllByTextChunk_File_Id(file.getId())
+                    summaryChunkRepository.findAllByTextChunk_File_CategoryItem_Id(categoryItem.getId())
             );
 
             // Finishing Job

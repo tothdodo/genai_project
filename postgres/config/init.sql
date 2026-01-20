@@ -96,15 +96,11 @@ CREATE TABLE temporary_flashcards (
 -- Created from temporary flashcards by aggregate worker, linked to files and category items
 CREATE TABLE final_flashcards (
     id                  INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
-    file_id             INTEGER NOT NULL,
     question            TEXT NOT NULL,
     answer              TEXT NOT NULL,
     created_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
     category_item_id    INTEGER,
 
-    CONSTRAINT fk_final_flashcard_file
-        FOREIGN KEY (file_id) REFERENCES files(id),
-        
     CONSTRAINT fk_category_item_id
         FOREIGN KEY (category_item_id) REFERENCES category_items(id) ON DELETE SET NULL
 );

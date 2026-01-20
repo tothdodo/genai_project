@@ -26,22 +26,17 @@ public class FinalFlashcard {
     @Column(nullable = false, columnDefinition = "TEXT")
     private String answer;
 
-    @CreationTimestamp
-    @Column(name = "created_at", nullable = false, updatable = false)
-    private Instant createdAt;
-
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "file_id", nullable = false)
-    private File file;
-
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "category_item_id", nullable = false)
     private CategoryItem categoryItem;
 
-    public FinalFlashcard(String question, String answer, File file, CategoryItem categoryItem) {
+    @CreationTimestamp
+    @Column(name = "created_at", nullable = false, updatable = false)
+    private Instant createdAt;
+
+    public FinalFlashcard(String question, String answer, CategoryItem categoryItem) {
         this.question = question;
         this.answer = answer;
-        this.file = file;
         this.categoryItem = categoryItem;
         this.createdAt = Instant.now();
     }

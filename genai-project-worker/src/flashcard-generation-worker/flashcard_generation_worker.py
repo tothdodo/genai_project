@@ -6,7 +6,7 @@ import time
 
 from jsonschema.exceptions import ValidationError
 from jsonschema.validators import validate
-from pika.exceptions import ChannelWrongStateError, ReentrancyError, StreamLostError
+from pika.exceptions import ChannelWrongStateError, ReentrancyError, StreamLostError, AMQPError
 
 from messaging.rabbit_config import get_rabbitmq_config
 from messaging.rabbit_connect import create_rabbit_con_and_return_channel
@@ -70,12 +70,19 @@ def clean_json_response(text):
 def process_req(ch, method, properties, body):
     start_time = time.time()
 
+    def safe_ack():
+        try:
+            ch.basic_ack(delivery_tag=method.delivery_tag)
+        except (AMQPError, Exception) as ack_e:
+            logging.warning(f"Could not ack message (Connection likely timed out during processing): {ack_e}")
+
     try:
         request = json.loads(body)
         logging.info(f"Received request: {request}")
 
         if not validate_request(request):
             logging.error("Validation failed. Dropping message.")
+            safe_ack()
             return
 
         job_id = request.get('job_id')
@@ -86,19 +93,20 @@ def process_req(ch, method, properties, body):
         status = "unknown"
         flashcards_list = []
 
-        max_attempts = 3
+        max_attempts = 5
         last_error = None
 
         try:
             gemini_client = GeminiClient()
         except Exception as e:
             logging.error(f"Failed to instantiate GeminiClient: {e}")
+            safe_ack()
             return
 
         for attempt in range(max_attempts):
             try:
                 current_model = DEFAULT_MODEL
-                if attempt == 2:
+                if attempt == 3:
                     logging.info(f"Attempt {attempt + 1}: Retrying with fallback model {FALLBACK_MODEL}...")
                     current_model = FALLBACK_MODEL
 
@@ -132,14 +140,14 @@ def process_req(ch, method, properties, body):
                         raise ValueError(error_msg)
 
             except Exception as api_or_json_error:
-                # Capture the actual exception message (e.g., "Expecting value: line 1 column 1")
+                # Capture the actual exception message
                 last_error = str(api_or_json_error)
                 logging.error(f"Gemini/Parsing Error (Attempt {attempt + 1}): {last_error}")
 
                 if attempt == max_attempts - 1:
                     status = "failed"
                 else:
-                    time.sleep(2)
+                    time.sleep(5)
 
         result_payload = {
             "flashcards": flashcards_list,
@@ -147,19 +155,33 @@ def process_req(ch, method, properties, body):
             "duration": time.time() - start_time
         }
 
-        publisher = ResultPublisher(ch)
-        publisher.publish_flashcard_result(
-            payload=result_payload,
-            original_job_id=job_id,
-            status=status
-        )
+        # 6. Publish Result (Using Fresh Connection)
+        try:
+            pub_channel = create_rabbit_con_and_return_channel()
+            publisher = ResultPublisher(pub_channel)
+            publisher.publish_flashcard_result(
+                payload=result_payload,
+                original_job_id=job_id,
+                status=status
+            )
 
-        logging.info(f"Job {job_id} completed. Status: {status}")
+            if pub_channel.connection and pub_channel.connection.is_open:
+                pub_channel.connection.close()
+
+            logging.info(f"Job {job_id} completed. Status: {status}")
+        except Exception as pub_error:
+            logging.error(f"Failed to publish result for Job {job_id}: {pub_error}")
+            return
+
+        # 7. Acknowledge Original Message
+        safe_ack()
 
     except json.JSONDecodeError:
         logging.error("Failed to decode JSON body")
+        safe_ack()
     except Exception as e:
         logging.error(f"Unexpected error: {e}")
+        # No ack, let retry
 
 
 def main():
@@ -170,7 +192,8 @@ def main():
         process_req(ch, method, properties, body)
 
     queue_name = rabbitConfig.queue_flashcard_generation_job
-    channel.basic_consume(queue=queue_name, on_message_callback=callback, auto_ack=True)
+    # CHANGE: auto_ack set to False
+    channel.basic_consume(queue=queue_name, on_message_callback=callback, auto_ack=False)
 
     logging.info(f"Waiting for messages on {queue_name}")
     try:

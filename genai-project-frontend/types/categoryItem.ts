@@ -30,8 +30,6 @@ export type Summary = {
 export type Flashcard = {
     question: string;
     answer: string;
-    orderId: number;
-    filename: string;
 }
 
 export type CategoryHeader = {

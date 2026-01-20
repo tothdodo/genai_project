@@ -9,4 +9,5 @@ import java.util.List;
 @Repository
 public interface TemporaryFlashcardRepository extends JpaRepository<TemporaryFlashcard, Integer> {
     List<TemporaryFlashcard> findAllBySummaryChunk_TextChunk_File_Id(Long fileId);
+    List<TemporaryFlashcard> findAllBySummaryChunk_TextChunk_File_CategoryItem_Id(Integer categoryItemId);
 }

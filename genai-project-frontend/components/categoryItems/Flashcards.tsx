@@ -128,25 +128,6 @@ const FlashcardItem = ({
     return (
         <Card className="flex flex-col h-full transition-all duration-300 hover:shadow-lg border-muted-foreground/20">
             <CardHeader className="pb-2">
-                <div className="flex justify-between items-start mb-2">
-                    <Badge variant="outline" className="text-[10px] font-mono">
-                        Number {flashcard.orderId}
-                    </Badge>
-                    <div className="flex items-center gap-1 text-muted-foreground">
-                        <TooltipProvider>
-                            <Tooltip>
-                                <TooltipTrigger asChild>
-                                    <div className="cursor-help p-1 hover:bg-muted rounded-full transition-colors">
-                                        <BookOpen size={16} />
-                                    </div>
-                                </TooltipTrigger>
-                                <TooltipContent side="top">
-                                    <p className="text-xs font-medium semibold">{flashcard.filename}</p>
-                                </TooltipContent>
-                            </Tooltip>
-                        </TooltipProvider>
-                    </div>
-                </div>
                 <CardTitle className="text-lg font-semibold leading-tight min-h-[3rem]">
                     {flashcard.question}
                 </CardTitle>

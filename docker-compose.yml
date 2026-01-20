@@ -87,7 +87,12 @@ services:
     build:
       context: ./genai-project-worker
       dockerfile: Dockerfile-flashcard-generation-worker
-    container_name: flashcard-generation-worker
+    # container_name: flashcard-generation-worker
+    deploy:
+      replicas: 4
+    environment:
+      # CRITICAL: Prevent one worker from hogging all jobs
+      - RABBITMQ_PREFETCH=1
     env_file:
       - .env
     depends_on:
@@ -108,7 +113,12 @@ services:
     build:
       context: ./genai-project-worker
       dockerfile: Dockerfile-summary-generation-worker
-    container_name: summary-generation-worker
+    # container_name: summary-generation-worker
+    deploy:
+      replicas: 4
+    environment:
+      # CRITICAL: Prevent one worker from hogging all jobs
+      - RABBITMQ_PREFETCH=1
     env_file:
       - .env
     depends_on:

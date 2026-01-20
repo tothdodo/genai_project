@@ -9,4 +9,5 @@ import java.util.List;
 @Repository
 public interface SummaryChunkRepository extends JpaRepository<SummaryChunk, Integer> {
     List<SummaryChunk> findAllByTextChunk_File_Id(Long fileId);
+    List<SummaryChunk> findAllByTextChunk_File_CategoryItem_Id(Integer categoryItemId);
 }

@@ -15,10 +15,4 @@ public class FlashcardDTO {
 
     @NotBlank
     private String answer;
-
-    @NotNull
-    private Integer orderId;
-
-    @NotBlank
-    private String filename;
 }
