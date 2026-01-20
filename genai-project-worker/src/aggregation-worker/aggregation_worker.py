@@ -15,7 +15,8 @@ from util.worker_utils import (
     connect_rabbitmq,
     mk_error_msg,
     clean_json_response,
-    publish_response_with_connection
+    publish_response_with_connection,
+    start_cancellation_listener
 )
 
 AGGREGATION_PROMPT = r"""
@@ -53,6 +54,7 @@ rabbitConfig = get_rabbitmq_config()
 DEFAULT_MODEL = "gemini-flash-latest"
 FALLBACK_MODEL = "gemini-2.0-flash"
 
+cancelled_categories = set()
 setup_sigterm()
 
 
@@ -74,7 +76,6 @@ def process_req(ch, method, properties, body):
         except (AMQPError, Exception) as ack_e:
             logging.warning(f"Could not ack message: {ack_e}")
 
-    # Helper to publish results
     def publish_response(msg: BaseMessage):
         publish_response_with_connection(
             msg,
@@ -87,7 +88,6 @@ def process_req(ch, method, properties, body):
 
     try:
         request = json.loads(body)
-        logging.info(f"Received request: {request}")
 
         job_id = request.get('job_id')
         if not job_id:
@@ -105,8 +105,14 @@ def process_req(ch, method, properties, body):
         flashcards = request.get('flashcards', [])
         combined_text = "\n\n".join(summaries)
 
+        category_item_id = request.get('category_item_id')
+
+        if str(category_item_id) in cancelled_categories:
+            logging.info(f"Job {job_id} cancelled for category {category_item_id} before starting.")
+            safe_ack()
+            return
+
         logging.info(f"Generating final summary and flashcards for Job {job_id}...")
-        status = "unknown"
         final_summary = ""
         final_flashcards = []
 
@@ -118,12 +124,16 @@ def process_req(ch, method, properties, body):
             safe_ack()
             return
 
-        # 1. Generate Final Summary
         max_attempts = 5
         last_error = None
         summary_success = False
 
         for attempt in range(max_attempts):
+            if str(category_item_id) in cancelled_categories:
+                logging.info(f"Job {job_id} cancelled for category {category_item_id} during summary aggregation.")
+                safe_ack()
+                return
+
             try:
                 current_model = DEFAULT_MODEL
                 if attempt == 3:
@@ -153,12 +163,17 @@ def process_req(ch, method, properties, body):
                 else:
                     time.sleep(5)
 
-        # 2. Generate Final Flashcards (Only if summary succeeded)
         if summary_success and flashcards:
             flashcards_json_str = json.dumps(flashcards)
             last_error = None
 
             for attempt in range(max_attempts):
+                if str(category_item_id) in cancelled_categories:
+                    logging.info(
+                        f"Job {job_id} cancelled for category {category_item_id} during flashcard aggregation.")
+                    safe_ack()
+                    return
+
                 try:
                     current_model = DEFAULT_MODEL
                     if attempt == 3:
@@ -201,7 +216,6 @@ def process_req(ch, method, properties, body):
             "duration": time.time() - start_time
         }
 
-        # 3. Publish Success
         publish_response(BaseMessage(
             type="aggregation",
             job_id=job_id,
@@ -209,7 +223,6 @@ def process_req(ch, method, properties, body):
             payload=result_payload
         ))
 
-        # 4. Acknowledge Original Message
         safe_ack()
 
     except json.JSONDecodeError:
@@ -229,6 +242,7 @@ def process_req(ch, method, properties, body):
 
 def main():
     logging.info("Aggregation Worker Started!")
+    start_cancellation_listener(cancelled_categories)
     channel = connect_rabbitmq()
 
     def callback(ch, method, properties, body):
@@ -249,4 +263,5 @@ def main():
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)
+    logging.getLogger("pika").setLevel(logging.CRITICAL)
     main()

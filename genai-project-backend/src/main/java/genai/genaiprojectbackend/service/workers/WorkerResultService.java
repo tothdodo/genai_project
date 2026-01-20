@@ -1,5 +1,6 @@
 package genai.genaiprojectbackend.service.workers;
 
+import genai.genaiprojectbackend.configuration.RabbitConfig;
 import genai.genaiprojectbackend.model.dtos.StartAggregationJobDto;
 import genai.genaiprojectbackend.model.dtos.StartFlashcardGenerationJobDto;
 import genai.genaiprojectbackend.model.dtos.StartSummaryGenerationJobDto;
@@ -8,8 +9,12 @@ import genai.genaiprojectbackend.model.enums.CategoryItemStatus;
 import genai.genaiprojectbackend.model.enums.JobStatus;
 import genai.genaiprojectbackend.model.enums.JobType;
 import genai.genaiprojectbackend.repository.*;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.util.StringUtils;
 
 import java.util.ArrayList;
@@ -18,6 +23,7 @@ import java.util.Map;
 import java.util.Optional;
 
 @Service
+@Slf4j
 public class WorkerResultService {
     private final WorkerStartService workerStartService;
     private final TextChunkRepository textChunkRepository;
@@ -28,6 +34,7 @@ public class WorkerResultService {
     private final JobRepository jobRepository;
     private final FinalSummaryRepository finalSummaryRepository;
     private final FinalFlashcardRepository finalFlashcardRepository;
+    private final RabbitTemplate rabbitTemplate;
 
     public WorkerResultService(
             TextChunkRepository textChunkRepository,
@@ -38,7 +45,8 @@ public class WorkerResultService {
             CategoryItemRepository categoryItemRepository,
             JobRepository jobRepository,
             FinalSummaryRepository finalSummaryRepository,
-            FinalFlashcardRepository finalFlashcardRepository
+            FinalFlashcardRepository finalFlashcardRepository,
+            RabbitTemplate rabbitTemplate
     ) {
         this.textChunkRepository = textChunkRepository;
         this.summaryChunkRepository = summaryChunkRepository;
@@ -49,6 +57,7 @@ public class WorkerResultService {
         this.jobRepository = jobRepository;
         this.finalSummaryRepository = finalSummaryRepository;
         this.finalFlashcardRepository = finalFlashcardRepository;
+        this.rabbitTemplate = rabbitTemplate;
     }
 
     @Transactional
@@ -57,6 +66,12 @@ public class WorkerResultService {
             Map<String, Object> payload = (Map<String, Object>) result.get("payload");
             Job job = getValidJobFromResult(result).orElse(null);
             if (job == null || !isResultSuccessful(result, job)) return;
+
+            if (!isJobActive(job)) {
+                log.warn("Backend: Received Text Extraction result for Job {} but status is {}. Ignoring (Zombie Result).", job.getId(), job.getStatus());
+                return;
+            }
+
             job.setStatus(JobStatus.FINISHED);
             jobRepository.save(job);
 
@@ -103,7 +118,12 @@ public class WorkerResultService {
                         .chunkNumber(i)
                         .build();
 
-                workerStartService.startSummaryGenerationJob(jobDto);
+                TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                    @Override
+                    public void afterCommit() {
+                        workerStartService.startSummaryGenerationJob(jobDto);
+                    }
+                });
             }
 
         } catch (Exception e) {
@@ -113,40 +133,66 @@ public class WorkerResultService {
 
     @Transactional
     public void processSummaryGenerationResult(Map<String, Object> result) {
+        log.info("Backend: Received Summary Generation Result: {}", result);
+
         Job job = getValidJobFromResult(result).orElse(null);
-        if (job == null || !isResultSuccessful(result, job)) return;
 
-        Map<String, Object> payload = getPayload(result);
-        String summaryText = (String) payload.get("summary");
-        Integer chunkNumber = (Integer) payload.get("chunk_number");
+        if (job == null) {
+            log.error("Backend: Job NOT FOUND from result. Looking for keys 'job_id' or 'original_job_id'. Raw map: {}", result);
+            return;
+        }
 
-        Optional<TextChunk> textChunkOpt = textChunkRepository.findByFile_IdAndChunkIndex(job.getFileId(), chunkNumber);
+        if (!isResultSuccessful(result, job)) {
+            log.info("Backend: Job {} detected as FAILED via isResultSuccessful check. Returning...", job.getId());
+            return;
+        }
 
-        if (textChunkOpt.isPresent() && StringUtils.hasText(summaryText)) {
-            // 1. Save the Summary
-            SummaryChunk summaryChunk = new SummaryChunk(textChunkOpt.get(), summaryText);
-            summaryChunk = summaryChunkRepository.save(summaryChunk);
+        if (!isJobActive(job)) {
+            log.warn("Backend: Received Summary result for Job {} but status is {}. Ignoring (Zombie Result).", job.getId(), job.getStatus());
+            return;
+        }
 
-            job.setStatus(JobStatus.FINISHED);
-            jobRepository.save(job);
+        log.info("Backend: Job {} SUCCESS. Processing payload...", job.getId());
 
-            // 2. TRIGGER FLASHCARD GENERATION
-            // Create a new job for flashcard generation
-            Job flashcardJob = new Job(JobType.FLASHCARD_GENERATION, job.getCategoryItemId());
-            flashcardJob.setFileId(job.getFileId());
-            flashcardJob = jobRepository.save(flashcardJob);
+        try {
+            Map<String, Object> payload = getPayload(result);
+            String summaryText = (String) payload.get("summary");
+            Integer chunkNumber = (Integer) payload.get("chunk_number");
 
-            // Prepare DTO
-            StartFlashcardGenerationJobDto startDto = StartFlashcardGenerationJobDto.builder()
-                    .jobId(flashcardJob.getId())
-                    .summaryChunkId(summaryChunk.getId())
-                    .text(summaryText) // We generate flashcards from the summary
-                    .build();
+            Optional<TextChunk> textChunkOpt = textChunkRepository.findByFile_IdAndChunkIndex(job.getFileId(), chunkNumber);
 
-            // Send to RabbitMQ
-            workerStartService.startFlashcardGenerationJob(startDto);
+            if (textChunkOpt.isPresent() && StringUtils.hasText(summaryText)) {
+                SummaryChunk summaryChunk = new SummaryChunk(textChunkOpt.get(), summaryText);
+                summaryChunk = summaryChunkRepository.save(summaryChunk);
 
-        } else {
+                job.setStatus(JobStatus.FINISHED);
+                jobRepository.save(job);
+
+                Job flashcardJob = new Job(JobType.FLASHCARD_GENERATION, job.getCategoryItemId());
+                flashcardJob.setFileId(job.getFileId());
+                flashcardJob = jobRepository.save(flashcardJob);
+
+                StartFlashcardGenerationJobDto startDto = StartFlashcardGenerationJobDto.builder()
+                        .jobId(flashcardJob.getId())
+                        .summaryChunkId(summaryChunk.getId())
+                        .text(summaryText)
+                        .categoryItemId(job.getCategoryItemId())
+                        .build();
+
+                TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                    @Override
+                    public void afterCommit() {
+                        workerStartService.startFlashcardGenerationJob(startDto);
+                    }
+                });
+
+            } else {
+                log.error("Backend: Summary logic failed (Chunk found: {}, Text valid: {}). Triggering handleJobFailure.",
+                        textChunkOpt.isPresent(), StringUtils.hasText(summaryText));
+                handleJobFailure(job);
+            }
+        } catch (Exception e) {
+            log.error("Backend: Exception in processSummaryGenerationResult: ", e);
             handleJobFailure(job);
         }
     }
@@ -156,9 +202,13 @@ public class WorkerResultService {
         Job job = getValidJobFromResult(result).orElse(null);
         if (job == null || !isResultSuccessful(result, job)) return;
 
+        if (!isJobActive(job)) {
+            log.warn("Backend: Received Flashcard result for Job {} but status is {}. Ignoring (Zombie Result).", job.getId(), job.getStatus());
+            return;
+        }
+
         Map<String, Object> payload = getPayload(result);
 
-        // 1. Get Summary Chunk
         Integer summaryChunkId = (Integer) payload.get("summary_chunk_id");
         Optional<SummaryChunk> summaryChunkOpt = summaryChunkRepository.findById(summaryChunkId);
 
@@ -169,7 +219,6 @@ public class WorkerResultService {
 
         SummaryChunk summaryChunk = summaryChunkOpt.get();
 
-        // 2. Parse Flashcards List
         Object flashcardsObj = payload.get("flashcards");
         if (flashcardsObj instanceof List<?> list) {
             for (Object item : list) {
@@ -185,7 +234,6 @@ public class WorkerResultService {
             }
         }
 
-        // 3. Finish Job
         job.setStatus(JobStatus.FINISHED);
         jobRepository.save(job);
 
@@ -197,25 +245,21 @@ public class WorkerResultService {
      * If so, starts the Aggregation Job for the entire CategoryItem.
      */
     private void checkAndStartAggregation(Integer categoryItemId) {
-        // Check if there are any pending or in-progress jobs for this Category Item (across ALL files)
         long pendingJobs = jobRepository.countByCategoryItemIdAndStatusIn(
                 categoryItemId,
                 List.of(JobStatus.PENDING, JobStatus.IN_PROGRESS)
         );
 
         if (pendingJobs == 0) {
-            // 1. Fetch ALL summaries for this Category Item
             List<SummaryChunk> summaries = summaryChunkRepository.findAllByTextChunk_File_CategoryItem_Id(categoryItemId);
             List<String> summaryTexts = summaries.stream().map(SummaryChunk::getSummaryText).toList();
 
-            // 2. Fetch ALL Temporary Flashcards for this Category Item
             List<TemporaryFlashcard> tempFlashcards = temporaryFlashcardRepository.findAllBySummaryChunk_TextChunk_File_CategoryItem_Id(categoryItemId);
             List<Map<String, String>> flashcardMaps = tempFlashcards.stream()
                     .map(f -> Map.of("question", f.getQuestion(), "answer", f.getAnswer()))
                     .toList();
 
             if (summaryTexts.isEmpty() && flashcardMaps.isEmpty()) {
-                // Nothing to aggregate
                 return;
             }
 
@@ -230,7 +274,12 @@ public class WorkerResultService {
                     .flashcards(flashcardMaps)
                     .build();
 
-            workerStartService.startAggregationJob(dto);
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    workerStartService.startAggregationJob(dto);
+                }
+            });
         }
     }
 
@@ -238,6 +287,11 @@ public class WorkerResultService {
     public void processAggregationResult(Map<String, Object> result) {
         Job job = getValidJobFromResult(result).orElse(null);
         if (job == null || !isResultSuccessful(result, job)) return;
+
+        if (!isJobActive(job)) {
+            log.warn("Backend: Received Aggregation result for Job {} but status is {}. Ignoring (Zombie Result).", job.getId(), job.getStatus());
+            return;
+        }
 
         Map<String, Object> payload = getPayload(result);
         String finalSummaryText = (String) payload.get("final_summary");
@@ -250,11 +304,9 @@ public class WorkerResultService {
         CategoryItem categoryItem = categoryItemRepository.findById(job.getCategoryItemId()).orElse(null);
 
         if (categoryItem != null) {
-            // 1. Save Final Summary
             FinalSummary finalSummary = new FinalSummary(finalSummaryText, categoryItem);
             finalSummaryRepository.save(finalSummary);
 
-            // 2. Save Final Flashcards
             Object finalFlashcardsObj = payload.get("final_flashcards");
             if (finalFlashcardsObj instanceof List<?> list) {
                 for (Object item : list) {
@@ -270,7 +322,6 @@ public class WorkerResultService {
                 }
             }
 
-            // 3. Cleanup Temporary Tables for the WHOLE CategoryItem
             temporaryFlashcardRepository.deleteAll(
                     temporaryFlashcardRepository.findAllBySummaryChunk_TextChunk_File_CategoryItem_Id(categoryItem.getId())
             );
@@ -278,26 +329,36 @@ public class WorkerResultService {
                     summaryChunkRepository.findAllByTextChunk_File_CategoryItem_Id(categoryItem.getId())
             );
 
-            // Finishing Job
             job.setStatus(JobStatus.FINISHED);
             jobRepository.save(job);
 
-            // Mark CategoryItem as COMPLETED
             categoryItem.setStatus(CategoryItemStatus.COMPLETED);
             categoryItemRepository.save(categoryItem);
         } else {
-            // Handle logical failure (CategoryItem not found)
             handleJobFailure(job);
         }
     }
 
-    // --- Helper Methods ---
+    /**
+     * Determines if a job is in an "Active" state (Pending or In Progress).
+     * If a job is Cancelled, Failed, or already Finished, it is considered inactive.
+     */
+    private boolean isJobActive(Job job) {
+        return job.getStatus() == JobStatus.PENDING || job.getStatus() == JobStatus.IN_PROGRESS;
+    }
 
     /**
      * Handles job failure by updating statuses and cleaning up all temporary data
      * (Flashcards, SummaryChunks, TextChunks) for the associated CategoryItem.
      */
     private void handleJobFailure(Job job) {
+        log.warn("Backend: handleJobFailure called for Job ID: {}", job.getId());
+
+        if (job.getStatus() == JobStatus.CANCELLED) {
+            log.info("Backend: Job {} already CANCELLED. Skipping failure logic.", job.getId());
+            return;
+        }
+
         job.setStatus(JobStatus.FAILED);
         jobRepository.save(job);
 
@@ -306,13 +367,32 @@ public class WorkerResultService {
             Optional<CategoryItem> categoryItemOpt = categoryItemRepository.findById(categoryItemId);
             if (categoryItemOpt.isPresent()) {
                 CategoryItem categoryItem = categoryItemOpt.get();
+                log.info("Backend: Marking CategoryItem {} as FAILED.", categoryItemId);
 
                 categoryItem.setStatus(CategoryItemStatus.FAILED);
                 categoryItem.setFailedJobType(job.getJobType());
                 categoryItemRepository.save(categoryItem);
 
+                log.info("Backend: Cancelling remaining jobs for category {}", categoryItemId);
+                jobRepository.cancelRemainingJobs(categoryItemId);
+
+                Map<String, Object> abortMessage = Map.of("categoryItemId", categoryItemId);
+
+                log.info("Backend: Sending broadcast to '{}': {}", RabbitConfig.WORKER_CANCELLATION_EXCHANGE, abortMessage);
+
+                rabbitTemplate.convertAndSend(
+                        RabbitConfig.WORKER_CANCELLATION_EXCHANGE,
+                        "",
+                        abortMessage
+                );
+
+                log.info("Backend: Broadcast sent (buffered in transaction). Cleaning up data...");
                 cleanupFailedCategoryData(categoryItemId);
+            } else {
+                log.error("Backend: CategoryItem {} not found in DB.", categoryItemId);
             }
+        } else {
+            log.error("Backend: Job {} has NULL categoryItemId.", job.getId());
         }
     }
 
@@ -356,10 +436,13 @@ public class WorkerResultService {
 
     private boolean isResultSuccessful(Map<String, Object> result, Job job) {
         String statusStr = (String) result.get("status");
+        log.debug("Backend: Checking status for Job {}: '{}'", job.getId(), statusStr);
+
         if ("success".equalsIgnoreCase(statusStr)) {
             return true;
         }
 
+        log.warn("Backend: Status is NOT success. Triggering handleJobFailure for Job {}", job.getId());
         handleJobFailure(job);
         return false;
     }

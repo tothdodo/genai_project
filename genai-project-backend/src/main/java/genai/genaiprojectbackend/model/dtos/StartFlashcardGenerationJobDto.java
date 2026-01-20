@@ -19,4 +19,7 @@ public class StartFlashcardGenerationJobDto {
 
     @JsonProperty("text")
     private String text;
+
+    @JsonProperty("category_item_id")
+    private Integer categoryItemId;
 }

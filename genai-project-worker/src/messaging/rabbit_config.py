@@ -14,6 +14,7 @@ class RabbitMQConfig:
     # Topologie-names (have to be correspondent to definitions.json)
     #
     exchange_worker_job: str = "worker-job"
+    exchange_worker_cancellation: str = "worker-cancellation"
     # (Java --> Python)
     queue_aggregation_job: str = "worker.aggregation.job"
     queue_flashcard_generation_job: str = "worker.flashcard.generation.job"

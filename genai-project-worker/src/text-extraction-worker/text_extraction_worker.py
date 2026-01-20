@@ -19,7 +19,8 @@ from util.worker_utils import (
     setup_sigterm,
     connect_rabbitmq,
     mk_error_msg,
-    publish_response_with_connection
+    publish_response_with_connection,
+    start_cancellation_listener
 )
 
 # Save chunks into data folder for local testing
@@ -28,6 +29,8 @@ BASE_DIR = Path("/data/text_chunks")
 rabbitConfig = get_rabbitmq_config()
 
 setup_sigterm()
+
+cancelled_categories = set()
 
 
 def publish_response(msg: BaseMessage):
@@ -145,8 +148,16 @@ def process_req(ch, method, properties, body):
         files_list = request.get("files", [])
         category_item_id = str(request.get("categoryItemId", "unknown_category"))
 
+        if category_item_id in cancelled_categories:
+            logging.info(f"Skipping job {job_id} because category {category_item_id} is cancelled.")
+            return
+
         # 2. Loop through each file in the list
         for file_entry in files_list:
+            if category_item_id in cancelled_categories:
+                logging.info("Aborting processing...")
+                return
+
             file_url = file_entry.get("url")
             file_id = str(file_entry.get("id", "unknown_file"))
 
@@ -208,6 +219,7 @@ def process_req(ch, method, properties, body):
 
 def main():
     logging.info("Text Extraction Worker Started!")
+    start_cancellation_listener(cancelled_categories)
     channel = connect_rabbitmq()
 
     def callback(ch, method, properties, body):

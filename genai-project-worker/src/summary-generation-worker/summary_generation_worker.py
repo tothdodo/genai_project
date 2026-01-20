@@ -15,7 +15,8 @@ from util.worker_utils import (
     setup_sigterm,
     connect_rabbitmq,
     mk_error_msg,
-    publish_response_with_connection
+    publish_response_with_connection,
+    start_cancellation_listener
 )
 
 SUMMARY_PROMPT = r"""
@@ -36,6 +37,7 @@ rabbitConfig = get_rabbitmq_config()
 DEFAULT_MODEL = "gemini-flash-latest"
 FALLBACK_MODEL = "gemini-2.0-flash"
 
+cancelled_categories = set()
 setup_sigterm()
 
 
@@ -69,30 +71,29 @@ def process_req(ch, method, properties, body):
         )
 
     try:
-        # 1. Parse Body
         request = json.loads(body)
-        logging.info(f"Received request: {request}")
 
-        # Get Job ID early for error reporting
         job_id = request.get('job_id')
         if not job_id:
             logging.error("Missing 'job_id' in payload. Cannot report error.")
             safe_ack()
             return
 
-        # 2. Validate Schema
         if not validate_request(request):
             logging.error("Validation failed. Cancelling Job.")
             publish_response(mk_error_msg(job_id, "Summary generation job cancelled because request is invalid"))
             safe_ack()
             return
 
-        # 3. Extract Fields
         input_text = request.get('text')
         category_id = request.get('category_id')
         chunk_number = request.get('chunk_number')
 
-        # 4. Generate Summary via Gemini
+        if str(category_id) in cancelled_categories:
+            logging.info(f"Job {job_id} cancelled for category {category_id} before starting.")
+            safe_ack()
+            return
+
         logging.info(f"Generating summary for Job {job_id}...")
         status = "unknown"
         summary_text = ""
@@ -109,6 +110,11 @@ def process_req(ch, method, properties, body):
         last_error = None
 
         for attempt in range(max_attempts):
+            if str(category_id) in cancelled_categories:
+                logging.info(f"Job {job_id} cancelled for category {category_id} during attempt {attempt + 1}.")
+                safe_ack()
+                return
+
             try:
                 current_model = DEFAULT_MODEL
                 if attempt == 3:
@@ -134,14 +140,12 @@ def process_req(ch, method, properties, body):
                 last_error = str(api_error)
                 logging.error(f"Gemini API/Generation Error (Attempt {attempt + 1}): {last_error}")
                 if attempt == max_attempts - 1:
-                    # If max attempts reached, we treat this as a job error
                     publish_response(mk_error_msg(job_id, "Failed to generate summary after multiple attempts."))
                     safe_ack()
                     return
                 else:
                     time.sleep(5)
 
-        # 5. Prepare Success Payload
         result_payload = {
             "summary": summary_text,
             "category_id": category_id,
@@ -149,7 +153,6 @@ def process_req(ch, method, properties, body):
             "duration": time.time() - start_time
         }
 
-        # 6. Publish Success
         publish_response(BaseMessage(
             type="summary_generation",
             job_id=job_id,
@@ -157,7 +160,6 @@ def process_req(ch, method, properties, body):
             payload=result_payload
         ))
 
-        # 7. Acknowledge Original Message
         safe_ack()
 
     except json.JSONDecodeError:
@@ -165,7 +167,6 @@ def process_req(ch, method, properties, body):
         safe_ack()
     except Exception as e:
         logging.error(f"Unexpected error in process_req: {e}")
-        # Try to report the crash if we have a job_id
         try:
             req_dict = json.loads(body)
             jid = req_dict.get("job_id")
@@ -173,12 +174,12 @@ def process_req(ch, method, properties, body):
                 publish_response(mk_error_msg(jid, "An unexpected error occurred, summary job cancelled."))
         except:
             pass
-        # Finally Ack to remove poison message
         safe_ack()
 
 
 def main():
     logging.info("Summary Generation Worker Started!")
+    start_cancellation_listener(cancelled_categories)
     channel = connect_rabbitmq()
 
     def callback(ch, method, properties, body):
@@ -203,4 +204,5 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     logging.basicConfig(level=(logging.DEBUG if args.verbose else logging.INFO))
+    logging.getLogger("pika").setLevel(logging.CRITICAL)
     main()
