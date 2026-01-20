@@ -44,7 +44,7 @@ def connect_rabbitmq():
 
 def publish_response(ch, msg: BaseMessage):
     publisher = ResultPublisher(ch)
-    publisher.publish_text_extraction_result(msg.payload)
+    publisher.publish_text_extraction_result(msg.payload, msg.job_id, msg.status)
     logging.debug(f"Sent response to exchange: {rabbitConfig.exchange_worker_results}")
 
 

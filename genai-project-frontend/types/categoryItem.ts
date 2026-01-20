@@ -14,7 +14,25 @@ export type CategoryItemDetails = {
     category: CategoryHeader;
     status: string;
     filenames: string[];
+    summary: string;
+    flashcards: Flashcard[];
 };
+
+export type Summary = {
+    title: string;
+    summary_sections: {
+        heading: string;
+        content: string;
+        subContent: string | null;
+    }[];
+}
+
+export type Flashcard = {
+    question: string;
+    answer: string;
+    orderId: number;
+    filename: string;
+}
 
 export type CategoryHeader = {
     id: number;

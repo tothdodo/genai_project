@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/card";
 import Link from "next/link";
 import { CategoryItemDetails } from "@/types/categoryItem";
 import { CategoryItemProvider, useCategoryItem } from "@/contexts/CategoryItemContext";
+import Summary from "./Summary";
 
 export default function CategoryItemClient({ initialItem }: { initialItem: CategoryItemDetails }) {
     return (
@@ -19,7 +20,7 @@ export default function CategoryItemClient({ initialItem }: { initialItem: Categ
 }
 
 function CategoryItemContent() {
-    const { categoryItem, status } = useCategoryItem();
+    const { categoryItem } = useCategoryItem();
 
     return (
         <div className="container mx-auto flex flex-col">
@@ -46,15 +47,7 @@ function CategoryItemContent() {
                         </div>
                     </Card>
                     <Card className="p-3">
-                        <div>
-                            <h1 className="text-2xl font-semibold tracking-tight">
-                                Summary
-                            </h1>
-                            <div className="text-sm text-muted-foreground mt-2 space-y-2">
-                                <p>No summary available.</p>
-                                <p>Upload content to create summary and flashcards.</p>
-                            </div>
-                        </div>
+                        <Summary />
                     </Card>
                     <Card className="p-3">
                         <Flashcards />

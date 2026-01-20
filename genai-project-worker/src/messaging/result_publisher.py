@@ -46,8 +46,8 @@ class ResultPublisher:
     # def publish_comparison_result(self, payload: dict, status: str = "unknown"):
     #     self._publish(rabbitConfig.routing_comparison_result, payload, rabbitConfig.routing_comparison_result,status=status)
 
-    def publish_text_extraction_result(self, payload: dict, status: str = "unknown"):
-        self._publish(rabbitConfig.routing_text_extraction_result, payload, rabbitConfig.routing_text_extraction_result,status=status)
+    def publish_text_extraction_result(self, payload: dict, job_id: str, status: str):
+        self._publish(rabbitConfig.routing_text_extraction_result, payload, rabbitConfig.routing_text_extraction_result, status=status, job_id_override=job_id)
 
     # def publish_chunking_comparison_result(self, payload: dict, status: str = "unknown"):
     #     self._publish(rabbitConfig.routing_chunking_comparison_result, payload, rabbitConfig.routing_chunking_comparison_result,status=status)

@@ -6,6 +6,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.hibernate.annotations.CreationTimestamp;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
 
 @Entity
@@ -19,28 +20,29 @@ public class FinalFlashcard {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Integer id;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "file_id", nullable = false)
-    private File file;
-
     @Column(nullable = false, columnDefinition = "TEXT")
     private String question;
 
     @Column(nullable = false, columnDefinition = "TEXT")
     private String answer;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "category_item_id")
-    private CategoryItem categoryItem;
-
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
-    private LocalDateTime createdAt;
+    private Instant createdAt;
 
-    public FinalFlashcard(File file, String question, String answer, CategoryItem categoryItem) {
-        this.file = file;
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "file_id", nullable = false)
+    private File file;
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "category_item_id", nullable = false)
+    private CategoryItem categoryItem;
+
+    public FinalFlashcard(String question, String answer, File file, CategoryItem categoryItem) {
         this.question = question;
         this.answer = answer;
+        this.file = file;
         this.categoryItem = categoryItem;
+        this.createdAt = Instant.now();
     }
 }

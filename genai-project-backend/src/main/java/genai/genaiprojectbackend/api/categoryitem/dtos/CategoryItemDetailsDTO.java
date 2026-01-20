@@ -19,4 +19,6 @@ public class CategoryItemDetailsDTO {
     private final CategoryItemStatus status;
     private final CategoryHeaderDTO category;
     private List<String> filenames;
+    private final String summary;
+    private List<FlashcardDTO> flashcards;
 }
