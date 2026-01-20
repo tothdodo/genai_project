@@ -1,7 +1,5 @@
 import json
 import logging
-import signal
-import sys
 import time
 
 from jsonschema.exceptions import ValidationError
@@ -9,10 +7,16 @@ from jsonschema.validators import validate
 from pika.exceptions import ChannelWrongStateError, ReentrancyError, StreamLostError, AMQPError
 
 from messaging.rabbit_config import get_rabbitmq_config
-from messaging.rabbit_connect import create_rabbit_con_and_return_channel
-from messaging.result_publisher import ResultPublisher
+from messaging.message_model import BaseMessage
 from schemas.flashcard_generation import schema as flashcard_generation_schema
 from util.gemini_client import GeminiClient
+from util.worker_utils import (
+    setup_sigterm,
+    connect_rabbitmq,
+    mk_error_msg,
+    clean_json_response,
+    publish_response_with_connection
+)
 
 FLASHCARD_PROMPT = r"""
 You are a flashcard generator. Create a list of flashcards based on the provided text.
@@ -32,22 +36,7 @@ rabbitConfig = get_rabbitmq_config()
 DEFAULT_MODEL = "gemini-flash-latest"
 FALLBACK_MODEL = "gemini-2.0-flash"
 
-
-def handle_sigterm(signum, frame):
-    logging.info("SIGTERM received")
-    sys.exit(0)
-
-
-signal.signal(signal.SIGTERM, handle_sigterm)
-
-
-def connect_rabbitmq():
-    while True:
-        try:
-            return create_rabbit_con_and_return_channel()
-        except Exception as e:
-            logging.error("RabbitMQ connection failed, Retrying in 5s... Error: {}".format(e))
-            time.sleep(5)
+setup_sigterm()
 
 
 def validate_request(json_req):
@@ -59,14 +48,6 @@ def validate_request(json_req):
     return True
 
 
-def clean_json_response(text):
-    if text.startswith("```json"):
-        text = text[7:]
-    if text.endswith("```"):
-        text = text[:-3]
-    return text.strip()
-
-
 def process_req(ch, method, properties, body):
     start_time = time.time()
 
@@ -74,18 +55,35 @@ def process_req(ch, method, properties, body):
         try:
             ch.basic_ack(delivery_tag=method.delivery_tag)
         except (AMQPError, Exception) as ack_e:
-            logging.warning(f"Could not ack message (Connection likely timed out during processing): {ack_e}")
+            logging.warning(f"Could not ack message: {ack_e}")
+
+    # Helper to publish results using the specific flashcard publisher method
+    def publish_response(msg: BaseMessage):
+        publish_response_with_connection(
+            msg,
+            lambda pub, m: pub.publish_flashcard_result(
+                payload=m.payload,
+                original_job_id=m.job_id,
+                status=m.status
+            )
+        )
 
     try:
         request = json.loads(body)
         logging.info(f"Received request: {request}")
 
-        if not validate_request(request):
-            logging.error("Validation failed. Dropping message.")
+        job_id = request.get('job_id')
+        if not job_id:
+            logging.error("Missing 'job_id' in payload.")
             safe_ack()
             return
 
-        job_id = request.get('job_id')
+        if not validate_request(request):
+            logging.error("Validation failed. Cancelling job.")
+            publish_response(mk_error_msg(job_id, "Flashcard job cancelled because request is invalid"))
+            safe_ack()
+            return
+
         summary_chunk_id = request.get('summary_chunk_id')
         input_text = request.get('text')
 
@@ -100,6 +98,7 @@ def process_req(ch, method, properties, body):
             gemini_client = GeminiClient()
         except Exception as e:
             logging.error(f"Failed to instantiate GeminiClient: {e}")
+            publish_response(mk_error_msg(job_id, "Failed to initialize AI client"))
             safe_ack()
             return
 
@@ -134,18 +133,21 @@ def process_req(ch, method, properties, body):
                     last_error = error_msg
 
                     if attempt == max_attempts - 1:
-                        status = "failed"
-                        flashcards_list = []
+                        # Max attempts reached - Fail Job
+                        publish_response(mk_error_msg(job_id, "Failed to generate valid flashcards JSON."))
+                        safe_ack()
+                        return
                     else:
                         raise ValueError(error_msg)
 
             except Exception as api_or_json_error:
-                # Capture the actual exception message
                 last_error = str(api_or_json_error)
                 logging.error(f"Gemini/Parsing Error (Attempt {attempt + 1}): {last_error}")
 
                 if attempt == max_attempts - 1:
-                    status = "failed"
+                    publish_response(mk_error_msg(job_id, "An unexpected error occurred during generation."))
+                    safe_ack()
+                    return
                 else:
                     time.sleep(5)
 
@@ -155,25 +157,14 @@ def process_req(ch, method, properties, body):
             "duration": time.time() - start_time
         }
 
-        # 6. Publish Result (Using Fresh Connection)
-        try:
-            pub_channel = create_rabbit_con_and_return_channel()
-            publisher = ResultPublisher(pub_channel)
-            publisher.publish_flashcard_result(
-                payload=result_payload,
-                original_job_id=job_id,
-                status=status
-            )
+        # Publish Success
+        publish_response(BaseMessage(
+            type="flashcard_generation",
+            job_id=job_id,
+            status=status,
+            payload=result_payload
+        ))
 
-            if pub_channel.connection and pub_channel.connection.is_open:
-                pub_channel.connection.close()
-
-            logging.info(f"Job {job_id} completed. Status: {status}")
-        except Exception as pub_error:
-            logging.error(f"Failed to publish result for Job {job_id}: {pub_error}")
-            return
-
-        # 7. Acknowledge Original Message
         safe_ack()
 
     except json.JSONDecodeError:
@@ -181,7 +172,14 @@ def process_req(ch, method, properties, body):
         safe_ack()
     except Exception as e:
         logging.error(f"Unexpected error: {e}")
-        # No ack, let retry
+        try:
+            req_dict = json.loads(body)
+            jid = req_dict.get("job_id")
+            if jid:
+                publish_response(mk_error_msg(jid, "An unexpected error occurred, flashcard job cancelled."))
+        except:
+            pass
+        safe_ack()
 
 
 def main():
@@ -192,7 +190,6 @@ def main():
         process_req(ch, method, properties, body)
 
     queue_name = rabbitConfig.queue_flashcard_generation_job
-    # CHANGE: auto_ack set to False
     channel.basic_consume(queue=queue_name, on_message_callback=callback, auto_ack=False)
 
     logging.info(f"Waiting for messages on {queue_name}")

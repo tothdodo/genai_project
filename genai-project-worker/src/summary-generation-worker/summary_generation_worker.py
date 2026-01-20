@@ -1,20 +1,22 @@
-import logging
-import signal
-import sys
-import time
-import json
 import argparse
+import json
+import logging
+import time
 
 from jsonschema.exceptions import ValidationError
 from jsonschema.validators import validate
 from pika.exceptions import ChannelWrongStateError, ReentrancyError, StreamLostError, AMQPError
 
+from messaging.message_model import BaseMessage
 from messaging.rabbit_config import get_rabbitmq_config
-from messaging.rabbit_connect import create_rabbit_con_and_return_channel
-from messaging.result_publisher import ResultPublisher
 from schemas.summary_generation import schema as summary_generation_schema
 from util.gemini_client import GeminiClient
-
+from util.worker_utils import (
+    setup_sigterm,
+    connect_rabbitmq,
+    mk_error_msg,
+    publish_response_with_connection
+)
 
 SUMMARY_PROMPT = r"""
 Summarize the following content clearly and concisely.
@@ -34,22 +36,7 @@ rabbitConfig = get_rabbitmq_config()
 DEFAULT_MODEL = "gemini-flash-latest"
 FALLBACK_MODEL = "gemini-2.0-flash"
 
-
-def handle_sigterm(signum, frame):
-    logging.info("SIGTERM received")
-    sys.exit(0)
-
-
-signal.signal(signal.SIGTERM, handle_sigterm)
-
-
-def connect_rabbitmq():
-    while True:
-        try:
-            return create_rabbit_con_and_return_channel()
-        except Exception as e:
-            logging.error("RabbitMQ connection failed, Retrying in 5s... Error: {}".format(e))
-            time.sleep(5)
+setup_sigterm()
 
 
 def validate_request(json_req):
@@ -68,30 +55,42 @@ def process_req(ch, method, properties, body):
         try:
             ch.basic_ack(delivery_tag=method.delivery_tag)
         except (AMQPError, Exception) as ack_e:
-            logging.warning(f"Could not ack message (Connection likely timed out during processing): {ack_e}")
-            # Note: If ack fails, RabbitMQ will redeliver the message.
+            logging.warning(f"Could not ack message: {ack_e}")
+
+    # Helper to publish results (Success or Error)
+    def publish_response(msg: BaseMessage):
+        publish_response_with_connection(
+            msg,
+            lambda pub, m: pub.publish_summary_result(
+                payload=m.payload,
+                original_job_id=m.job_id,
+                status=m.status
+            )
+        )
 
     try:
         # 1. Parse Body
         request = json.loads(body)
         logging.info(f"Received request: {request}")
 
+        # Get Job ID early for error reporting
+        job_id = request.get('job_id')
+        if not job_id:
+            logging.error("Missing 'job_id' in payload. Cannot report error.")
+            safe_ack()
+            return
+
         # 2. Validate Schema
         if not validate_request(request):
-            logging.error("Validation failed. Dropping message.")
+            logging.error("Validation failed. Cancelling Job.")
+            publish_response(mk_error_msg(job_id, "Summary generation job cancelled because request is invalid"))
             safe_ack()
             return
 
         # 3. Extract Fields
-        job_id = request.get('job_id')
         input_text = request.get('text')
         category_id = request.get('category_id')
         chunk_number = request.get('chunk_number')
-
-        if not input_text or not job_id:
-            logging.error("Missing 'text' or 'job_id' in payload.")
-            safe_ack()
-            return
 
         # 4. Generate Summary via Gemini
         logging.info(f"Generating summary for Job {job_id}...")
@@ -102,7 +101,7 @@ def process_req(ch, method, properties, body):
             gemini_client = GeminiClient()
         except Exception as e:
             logging.error(f"Failed to instantiate GeminiClient: {e}")
-            # If client fails (e.g. no API key), we ack to avoid infinite retry loop
+            publish_response(mk_error_msg(job_id, f"Failed to initialize AI client: {e}"))
             safe_ack()
             return
 
@@ -135,12 +134,14 @@ def process_req(ch, method, properties, body):
                 last_error = str(api_error)
                 logging.error(f"Gemini API/Generation Error (Attempt {attempt + 1}): {last_error}")
                 if attempt == max_attempts - 1:
-                    status = "failed"
-                    summary_text = "Error generating summary."
+                    # If max attempts reached, we treat this as a job error
+                    publish_response(mk_error_msg(job_id, "Failed to generate summary after multiple attempts."))
+                    safe_ack()
+                    return
                 else:
                     time.sleep(5)
 
-        # 5. Prepare Result Payload
+        # 5. Prepare Success Payload
         result_payload = {
             "summary": summary_text,
             "category_id": category_id,
@@ -148,27 +149,13 @@ def process_req(ch, method, properties, body):
             "duration": time.time() - start_time
         }
 
-        # 6. Publish Result (Using Fresh Connection)
-        try:
-            # We open a NEW connection just for publishing to avoid 'ConnectionResetError'
-            # if the original consumer connection 'ch' timed out during the long AI processing.
-            pub_channel = create_rabbit_con_and_return_channel()
-            publisher = ResultPublisher(pub_channel)
-            publisher.publish_summary_result(
-                payload=result_payload,
-                original_job_id=job_id,
-                status=status
-            )
-
-            # Critical: Close the temporary connection
-            if pub_channel.connection and pub_channel.connection.is_open:
-                pub_channel.connection.close()
-
-            logging.info(f"Job {job_id} completed. Status: {status}. Time: {time.time() - start_time:.2f}s")
-        except Exception as pub_error:
-            logging.error(f"Failed to publish result for Job {job_id}: {pub_error}")
-            # If publishing fails, we probably shouldn't Ack, so RabbitMQ retries the whole job.
-            return
+        # 6. Publish Success
+        publish_response(BaseMessage(
+            type="summary_generation",
+            job_id=job_id,
+            status=status,
+            payload=result_payload
+        ))
 
         # 7. Acknowledge Original Message
         safe_ack()
@@ -178,7 +165,16 @@ def process_req(ch, method, properties, body):
         safe_ack()
     except Exception as e:
         logging.error(f"Unexpected error in process_req: {e}")
-        # In case of unexpected crash, we generally do NOT ack so it retries.
+        # Try to report the crash if we have a job_id
+        try:
+            req_dict = json.loads(body)
+            jid = req_dict.get("job_id")
+            if jid:
+                publish_response(mk_error_msg(jid, "An unexpected error occurred, summary job cancelled."))
+        except:
+            pass
+        # Finally Ack to remove poison message
+        safe_ack()
 
 
 def main():
@@ -188,11 +184,8 @@ def main():
     def callback(ch, method, properties, body):
         process_req(ch, method, properties, body)
 
-    # Using the queue name from definitions.json
     queue_name = "worker.summary.generation.job"
 
-    # Ensure this matches your rabbit_config.queue_summary_generation_job
-    # CHANGE: auto_ack set to False so we don't lose jobs if the worker crashes
     channel.basic_consume(queue=queue_name, on_message_callback=callback, auto_ack=False)
 
     logging.info(f"Waiting for messages on {queue_name}")

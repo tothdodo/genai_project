@@ -1,7 +1,5 @@
 import json
 import logging
-import signal
-import sys
 import time
 
 from jsonschema.exceptions import ValidationError
@@ -9,10 +7,16 @@ from jsonschema.validators import validate
 from pika.exceptions import ChannelWrongStateError, ReentrancyError, StreamLostError, AMQPError
 
 from messaging.rabbit_config import get_rabbitmq_config
-from messaging.rabbit_connect import create_rabbit_con_and_return_channel
-from messaging.result_publisher import ResultPublisher
+from messaging.message_model import BaseMessage
 from schemas.aggregation import schema as aggregation_schema
 from util.gemini_client import GeminiClient
+from util.worker_utils import (
+    setup_sigterm,
+    connect_rabbitmq,
+    mk_error_msg,
+    clean_json_response,
+    publish_response_with_connection
+)
 
 AGGREGATION_PROMPT = r"""
 You are an expert summarizer. 
@@ -49,22 +53,7 @@ rabbitConfig = get_rabbitmq_config()
 DEFAULT_MODEL = "gemini-flash-latest"
 FALLBACK_MODEL = "gemini-2.0-flash"
 
-
-def handle_sigterm(signum, frame):
-    logging.info("SIGTERM received")
-    sys.exit(0)
-
-
-signal.signal(signal.SIGTERM, handle_sigterm)
-
-
-def connect_rabbitmq():
-    while True:
-        try:
-            return create_rabbit_con_and_return_channel()
-        except Exception as e:
-            logging.error("RabbitMQ connection failed, Retrying in 5s... Error: {}".format(e))
-            time.sleep(5)
+setup_sigterm()
 
 
 def validate_request(json_req):
@@ -76,14 +65,6 @@ def validate_request(json_req):
     return True
 
 
-def clean_json_response(text):
-    if text.startswith("```json"):
-        text = text[7:]
-    if text.endswith("```"):
-        text = text[:-3]
-    return text.strip()
-
-
 def process_req(ch, method, properties, body):
     start_time = time.time()
 
@@ -91,25 +72,37 @@ def process_req(ch, method, properties, body):
         try:
             ch.basic_ack(delivery_tag=method.delivery_tag)
         except (AMQPError, Exception) as ack_e:
-            logging.warning(f"Could not ack message (Connection likely timed out during processing): {ack_e}")
-            # Note: If ack fails, RabbitMQ will redeliver the message.
-            # This is acceptable (at-least-once delivery) compared to losing the job.
+            logging.warning(f"Could not ack message: {ack_e}")
+
+    # Helper to publish results
+    def publish_response(msg: BaseMessage):
+        publish_response_with_connection(
+            msg,
+            lambda pub, m: pub.publish_aggregation_result(
+                payload=m.payload,
+                original_job_id=m.job_id,
+                status=m.status
+            )
+        )
 
     try:
         request = json.loads(body)
         logging.info(f"Received request: {request}")
 
-        if not validate_request(request):
-            logging.error("Validation failed. Dropping message.")
-            # We ack here so we don't retry invalid messages forever
+        job_id = request.get('job_id')
+        if not job_id:
+            logging.error("Missing 'job_id'. Dropping message.")
             safe_ack()
             return
 
-        job_id = request.get('job_id')
+        if not validate_request(request):
+            logging.error("Validation failed. Cancelling job.")
+            publish_response(mk_error_msg(job_id, "Aggregation job cancelled because request is invalid"))
+            safe_ack()
+            return
+
         summaries = request.get('summaries', [])
         flashcards = request.get('flashcards', [])
-
-        # Combine summaries into one text block
         combined_text = "\n\n".join(summaries)
 
         logging.info(f"Generating final summary and flashcards for Job {job_id}...")
@@ -121,16 +114,14 @@ def process_req(ch, method, properties, body):
             gemini_client = GeminiClient()
         except Exception as e:
             logging.error(f"Failed to instantiate GeminiClient: {e}")
-            # If we can't start the client, we probably want to retry later (nack) or fail.
-            # For now, we return and let the ack happen (or not), effectively dropping it to avoid loop.
+            publish_response(mk_error_msg(job_id, "Failed to initialize AI client"))
             safe_ack()
             return
 
-        # ---------------------------------------------------------
         # 1. Generate Final Summary
-        # ---------------------------------------------------------
         max_attempts = 5
         last_error = None
+        summary_success = False
 
         for attempt in range(max_attempts):
             try:
@@ -149,22 +140,21 @@ def process_req(ch, method, properties, body):
                 if final_summary and final_summary.startswith("Error"):
                     raise Exception(final_summary)
 
-                status = "success"
+                summary_success = True
                 break
 
             except Exception as api_error:
                 last_error = str(api_error)
                 logging.error(f"Gemini API Error during Summary Aggregation (Attempt {attempt + 1}): {last_error}")
                 if attempt == max_attempts - 1:
-                    status = "failed"
-                    final_summary = "Error generating final summary."
+                    publish_response(mk_error_msg(job_id, "Failed to aggregate summaries after multiple attempts."))
+                    safe_ack()
+                    return
                 else:
                     time.sleep(5)
 
-        # ---------------------------------------------------------
-        # 2. Generate Final Flashcards
-        # ---------------------------------------------------------
-        if status == "success" and flashcards:
+        # 2. Generate Final Flashcards (Only if summary succeeded)
+        if summary_success and flashcards:
             flashcards_json_str = json.dumps(flashcards)
             last_error = None
 
@@ -179,7 +169,8 @@ def process_req(ch, method, properties, body):
                         feedback_str = f"PREVIOUS ATTEMPT FAILED. ERROR: {last_error}. PLEASE FIX THE JSON STRUCTURE."
                         logging.info(f"Flashcard Aggregation Retry with error: {last_error}")
 
-                    formatted_prompt = FLASHCARD_AGGREGATION_PROMPT.format(text=flashcards_json_str, feedback=feedback_str)
+                    formatted_prompt = FLASHCARD_AGGREGATION_PROMPT.format(text=flashcards_json_str,
+                                                                           feedback=feedback_str)
                     raw_response = gemini_client.generate_content(formatted_prompt, model_name=current_model)
 
                     cleaned_response = clean_json_response(raw_response)
@@ -194,59 +185,46 @@ def process_req(ch, method, properties, body):
                         last_error = error_msg
 
                         if attempt == max_attempts - 1:
-                            # We don't fail the whole job if just flashcards fail, but we log it
                             logging.error("Failed to parse aggregated flashcards.")
-
+                            publish_response(mk_error_msg(job_id, "Failed to aggregate flashcards."))
+                            return
                 except Exception as api_or_json_error:
                     last_error = str(api_or_json_error)
-                    logging.error(f"Gemini API/Parsing Error during Flashcard Aggregation (Attempt {attempt + 1}): {last_error}")
+                    logging.error(
+                        f"Gemini API/Parsing Error during Flashcard Aggregation (Attempt {attempt + 1}): {last_error}")
                     time.sleep(5)
 
+        status = "success"
         result_payload = {
             "final_summary": final_summary,
             "final_flashcards": final_flashcards,
             "duration": time.time() - start_time
         }
 
-        # ---------------------------------------------------------
-        # 3. Publish Result (Using Fresh Connection)
-        # ---------------------------------------------------------
-        try:
-            # We open a NEW connection just for publishing to avoid 'ConnectionResetError'
-            # if the original consumer connection 'ch' timed out during the long AI processing.
-            pub_channel = create_rabbit_con_and_return_channel()
+        # 3. Publish Success
+        publish_response(BaseMessage(
+            type="aggregation",
+            job_id=job_id,
+            status=status,
+            payload=result_payload
+        ))
 
-            publisher = ResultPublisher(pub_channel)
-            publisher.publish_aggregation_result(
-                payload=result_payload,
-                original_job_id=job_id,
-                status=status
-            )
-
-            # Critical: Close the temporary connection
-            if pub_channel.connection and pub_channel.connection.is_open:
-                pub_channel.connection.close()
-
-            logging.info(f"Job {job_id} completed. Status: {status}")
-
-        except Exception as pub_error:
-            logging.error(f"Failed to publish result for Job {job_id}: {pub_error}")
-            # If publishing fails, we probably shouldn't Ack, so RabbitMQ retries the whole job.
-            return
-
-        # ---------------------------------------------------------
         # 4. Acknowledge Original Message
-        # ---------------------------------------------------------
         safe_ack()
 
     except json.JSONDecodeError:
         logging.error("Failed to decode JSON body")
-        safe_ack()  # Remove bad JSON from queue
+        safe_ack()
     except Exception as e:
         logging.error(f"Unexpected error: {e}")
-        # In case of unexpected crash, we generally do NOT ack so it retries.
-        # But if you want to discard poison messages, you might Ack here.
-        # safe_ack()
+        try:
+            req_dict = json.loads(body)
+            jid = req_dict.get("job_id")
+            if jid:
+                publish_response(mk_error_msg(jid, "An unexpected error occurred during aggregation."))
+        except:
+            pass
+        safe_ack()
 
 
 def main():
@@ -258,7 +236,6 @@ def main():
 
     queue_name = rabbitConfig.queue_aggregation_job
 
-    # CHANGE: auto_ack set to False so we don't lose jobs if the worker crashes
     channel.basic_consume(queue=queue_name, on_message_callback=callback, auto_ack=False)
 
     logging.info(f"Waiting for messages on {queue_name}")

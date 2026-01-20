@@ -1,6 +1,4 @@
 import logging
-import signal
-import sys
 import time
 import json
 import argparse
@@ -14,37 +12,29 @@ import os
 from pathlib import Path
 
 from messaging.rabbit_config import get_rabbitmq_config
-from messaging.rabbit_connect import create_rabbit_con_and_return_channel
 from schemas.text_extraction import schema as text_extraction_schema
 from messaging.message_model import BaseMessage
-from messaging.result_publisher import ResultPublisher
 from requests.exceptions import HTTPError
+from util.worker_utils import (
+    setup_sigterm,
+    connect_rabbitmq,
+    mk_error_msg,
+    publish_response_with_connection
+)
 
 # Save chunks into data folder for local testing
 BASE_DIR = Path("/data/text_chunks")
 
 rabbitConfig = get_rabbitmq_config()
 
-def handle_sigterm(signum, frame):
-    logging.info("SIGTERM received")
-    sys.exit(0)
+setup_sigterm()
 
 
-signal.signal(signal.SIGTERM, handle_sigterm)
-
-
-def connect_rabbitmq():
-    while True:
-        try:
-            return create_rabbit_con_and_return_channel()
-        except Exception as e:
-            logging.error("RabbitMQ connection failed, Retrying in 5s... Error: {}".format(e))
-            time.sleep(5)
-
-
-def publish_response(ch, msg: BaseMessage):
-    publisher = ResultPublisher(ch)
-    publisher.publish_text_extraction_result(msg.payload, msg.job_id, msg.status)
+def publish_response(msg: BaseMessage):
+    publish_response_with_connection(
+        msg,
+        lambda pub, m: pub.publish_text_extraction_result(m.payload, m.job_id, m.status)
+    )
     logging.debug(f"Sent response to exchange: {rabbitConfig.exchange_worker_results}")
 
 
@@ -53,27 +43,16 @@ def validate_request(json_req):
         validate(instance=json_req, schema=text_extraction_schema)
     except ValidationError as e:
         logging.warning(f"The text extraction job request is invalid, ValidationError error: {e}")
-        return False  # TODO: Might be an exception here as well
+        return False
     return True
-
-
-def mk_error_msg(job_id: str, error_msg: str):
-    return BaseMessage(
-        type="metadata",
-        job_id=job_id,
-        status="error",
-        payload={
-            "msg": error_msg
-        }
-    )
 
 
 def mk_success_msg(job_id: str, payload: dict):
     return BaseMessage(
-        type = "metadata",
-        job_id = job_id,
-        status = "success",
-        payload= payload
+        type="metadata",
+        job_id=job_id,
+        status="success",
+        payload=payload
     )
 
 
@@ -155,7 +134,7 @@ def process_req(ch, method, properties, body):
     job_id = req["jobId"]
     if not validate_request(req):
         logging.warning("The text extraction job is cancelled because of a Validation Error")
-        publish_response(ch, mk_error_msg(job_id, "Text extraction job is cancelled because job request is invalid"))
+        publish_response(mk_error_msg(job_id, "Text extraction job is cancelled because job request is invalid"))
         return
     try:
         request = json.loads(body)
@@ -203,32 +182,31 @@ def process_req(ch, method, properties, body):
                 logging.info(f"Saved {len(text_chunks)} chunks to {target_folder.absolute()}")
 
                 # --- Continue with your logic for saving/using 'text' and 'images' here ---
-                publish_response(ch, BaseMessage(type="text_extraction", job_id=job_id, status="success",
-                                                 payload={
-                                                     "textChunks": text_chunks,
-                                                     "fileId": file_id,
-                                                     "categoryItemId": category_item_id,
-                                                     # Todo: Do we need these?
-                                                     "pageStart": 0,
-                                                     "pageEnd": 0
-                                                 }))
+                publish_response(BaseMessage(type="text_extraction", job_id=job_id, status="success",
+                                             payload={
+                                                 "textChunks": text_chunks,
+                                                 "fileId": file_id,
+                                                 "categoryItemId": category_item_id,
+                                                 # Todo: Do we need these?
+                                                 "pageStart": 0,
+                                                 "pageEnd": 0
+                                             }))
             except HTTPError as e:
                 logging.warning("Couldn't download file from: {}, error: {}".format(file_url, e))
                 # Depending on requirements, you might 'continue' to the next file
                 # or 'return' to fail the whole job.
-                publish_response(ch, mk_error_msg(job_id, f"Error downloading {file_url}: {e}"))
+                publish_response(mk_error_msg(job_id, f"Error downloading {file_url}: {e}"))
                 continue
 
     except Exception as e:
         logging.error(f"Failed to process message: {e}")
-        publish_response(ch, mk_error_msg(job_id, "An unexpected error occured, text_extraction job cancelled"))
+        publish_response(mk_error_msg(job_id, "An unexpected error occured, text_extraction job cancelled"))
     finally:
         processing_time = int((time.time() - start_time) * 1000)
         logging.info(f"Worker took {processing_time} ms to process the message.")
 
 
 def main():
-    # logging.info(f"Connected to RabbitMQ Listening on queue '{rabbitConfig.queue_comparison_job}'")
     logging.info("Text Extraction Worker Started!")
     channel = connect_rabbitmq()
 
