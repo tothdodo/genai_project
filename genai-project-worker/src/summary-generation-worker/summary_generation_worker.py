@@ -16,16 +16,23 @@ from schemas.summary_generation import schema as summary_generation_schema
 from util.gemini_client import GeminiClient
 
 
-SUMMARY_PROMPT = """
+SUMMARY_PROMPT = r"""
 Summarize the following content clearly and concisely.
 Focus on key ideas, definitions, and facts.
 Avoid repetition.
+IMPORTANT: The text may contain LaTeX formatting. You must escape all backslashes in your JSON output (e.g., write "\\pi" instead of "\pi").
+Do not include markdown formatting (like ```json). Just return the raw JSON string.
+
+{feedback}
 
 TEXT:
 {text}
 """
 
 rabbitConfig = get_rabbitmq_config()
+
+DEFAULT_MODEL = "gemini-flash-latest"
+FALLBACK_MODEL = "gemini-2.0-flash"
 
 
 def handle_sigterm(signum, frame):
@@ -84,13 +91,43 @@ def process_req(ch, method, properties, body):
 
         try:
             gemini_client = GeminiClient()
-            formatted_prompt = SUMMARY_PROMPT.format(text=input_text)
-            summary_text = gemini_client.generate_content(formatted_prompt)
-            status = "success"
-        except Exception as api_error:
-            logging.error(f"Gemini API Error: {api_error}")
-            status = "failed"
-            summary_text = "Error generating summary."
+        except Exception as e:
+            logging.error(f"Failed to instantiate GeminiClient: {e}")
+            return
+
+        max_attempts = 3
+        last_error = None
+
+        for attempt in range(max_attempts):
+            try:
+                current_model = DEFAULT_MODEL
+                if attempt == 2:
+                    logging.info(f"Attempt {attempt + 1}: Retrying with fallback model {FALLBACK_MODEL}...")
+                    current_model = FALLBACK_MODEL
+
+                feedback_str = ""
+                if last_error:
+                    feedback_str = f"PREVIOUS ATTEMPT FAILED. ERROR: {last_error}. PLEASE FIX THE OUTPUT FORMAT."
+                    logging.info(f"Retrying with error context: {last_error}")
+
+                formatted_prompt = SUMMARY_PROMPT.format(text=input_text, feedback=feedback_str)
+
+                summary_text = gemini_client.generate_content(formatted_prompt, model_name=current_model)
+
+                if summary_text and summary_text.startswith("Error"):
+                    raise Exception(summary_text)
+
+                status = "success"
+                break
+
+            except Exception as api_error:
+                last_error = str(api_error)
+                logging.error(f"Gemini API/Generation Error (Attempt {attempt + 1}): {last_error}")
+                if attempt == max_attempts - 1:
+                    status = "failed"
+                    summary_text = "Error generating summary."
+                else:
+                    time.sleep(2)
 
         # 5. Prepare Result Payload
         result_payload = {

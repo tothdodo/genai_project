@@ -1,9 +1,8 @@
+import json
 import logging
 import signal
 import sys
 import time
-import json
-import argparse
 
 from jsonschema.exceptions import ValidationError
 from jsonschema.validators import validate
@@ -15,17 +14,23 @@ from messaging.result_publisher import ResultPublisher
 from schemas.flashcard_generation import schema as flashcard_generation_schema
 from util.gemini_client import GeminiClient
 
-FLASHCARD_PROMPT = """
+FLASHCARD_PROMPT = r"""
 You are a flashcard generator. Create a list of flashcards based on the provided text.
 The output must be a valid JSON list of objects.
 Each object must have exactly two keys: "question" and "answer".
+IMPORTANT: The text may contain LaTeX formatting. You must escape all backslashes in your JSON output (e.g., write "\\pi" instead of "\pi").
 Do not include markdown formatting (like ```json). Just return the raw JSON string.
+
+{feedback}
 
 TEXT:
 {text}
 """
 
 rabbitConfig = get_rabbitmq_config()
+
+DEFAULT_MODEL = "gemini-flash-latest"
+FALLBACK_MODEL = "gemini-2.0-flash"
 
 
 def handle_sigterm(signum, frame):
@@ -81,27 +86,60 @@ def process_req(ch, method, properties, body):
         status = "unknown"
         flashcards_list = []
 
+        max_attempts = 3
+        last_error = None
+
         try:
             gemini_client = GeminiClient()
-            formatted_prompt = FLASHCARD_PROMPT.format(text=input_text)
+        except Exception as e:
+            logging.error(f"Failed to instantiate GeminiClient: {e}")
+            return
 
-            # Call Gemini
-            raw_response = gemini_client.generate_content(formatted_prompt)
+        for attempt in range(max_attempts):
+            try:
+                current_model = DEFAULT_MODEL
+                if attempt == 2:
+                    logging.info(f"Attempt {attempt + 1}: Retrying with fallback model {FALLBACK_MODEL}...")
+                    current_model = FALLBACK_MODEL
 
-            # Clean and Parse JSON
-            cleaned_response = clean_json_response(raw_response)
-            flashcards_list = json.loads(cleaned_response)
+                feedback_str = ""
+                if last_error:
+                    feedback_str = f"PREVIOUS ATTEMPT FAILED. ERROR: {last_error}. PLEASE FIX THE JSON STRUCTURE."
+                    logging.info(f"Retrying with error context: {last_error}")
 
-            if isinstance(flashcards_list, list):
-                status = "success"
-            else:
-                logging.error("Gemini response was not a JSON list")
-                status = "failed"
-                flashcards_list = []
+                formatted_prompt = FLASHCARD_PROMPT.format(
+                    text=input_text,
+                    feedback=feedback_str
+                )
 
-        except Exception as api_error:
-            logging.error(f"Gemini/Parsing Error: {api_error}")
-            status = "failed"
+                raw_response = gemini_client.generate_content(formatted_prompt, model_name=current_model)
+
+                cleaned_response = clean_json_response(raw_response)
+                flashcards_list = json.loads(cleaned_response)
+
+                if isinstance(flashcards_list, list):
+                    status = "success"
+                    break
+                else:
+                    error_msg = "Output parsed as valid JSON but was not a list."
+                    logging.error(f"{error_msg} (Attempt {attempt + 1})")
+                    last_error = error_msg
+
+                    if attempt == max_attempts - 1:
+                        status = "failed"
+                        flashcards_list = []
+                    else:
+                        raise ValueError(error_msg)
+
+            except Exception as api_or_json_error:
+                # Capture the actual exception message (e.g., "Expecting value: line 1 column 1")
+                last_error = str(api_or_json_error)
+                logging.error(f"Gemini/Parsing Error (Attempt {attempt + 1}): {last_error}")
+
+                if attempt == max_attempts - 1:
+                    status = "failed"
+                else:
+                    time.sleep(2)
 
         result_payload = {
             "flashcards": flashcards_list,

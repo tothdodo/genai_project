@@ -73,6 +73,16 @@ class ResultPublisher:
             job_id_override=original_job_id
         )
 
+    def publish_aggregation_result(self, payload: dict, original_job_id: str, status: str = "unknown"):
+        routing_key = rabbitConfig.routing_aggregation_result
+        self._publish(
+            routing_key=routing_key,
+            payload=payload,
+            msg_type=routing_key,
+            status=status,
+            job_id_override=original_job_id
+        )
+
     def close(self):
         # if connection is done externally, connection is not closed here
         if not self._external_conn:
