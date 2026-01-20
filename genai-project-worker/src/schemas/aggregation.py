@@ -10,9 +10,6 @@ schema = {
             "type": "integer",
             "minimum": 0
         },
-        "file_id": {
-             "type": "number"
-        },
         "summaries": {
             "type": "array",
             "items": {

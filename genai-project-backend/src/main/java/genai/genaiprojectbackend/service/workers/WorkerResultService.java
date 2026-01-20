@@ -227,7 +227,6 @@ public class WorkerResultService {
             StartAggregationJobDto dto = StartAggregationJobDto.builder()
                     .jobId(aggJob.getId())
                     .categoryItemId(categoryItemId)
-                    .fileId(null)
                     .summaries(summaryTexts)
                     .flashcards(flashcardMaps)
                     .build();

@@ -10,6 +10,9 @@ import lombok.Setter;
 @Setter
 @AllArgsConstructor
 public class FlashcardDTO {
+    @NotNull
+    private Integer id;
+
     @NotBlank
     private String question;
 

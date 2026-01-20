@@ -121,8 +121,6 @@ CREATE TABLE jobs (
     file_id             INTEGER,
     job_type            VARCHAR(30) CHECK (job_type in ('TEXT_EXTRACTION', 'SUMMARY_GENERATION', 'FLASHCARD_GENERATION', 'AGGREGATION')) NOT NULL,
     status              VARCHAR(30) CHECK (status in ('PENDING', 'IN_PROGRESS', 'FINISHED', 'FAILED')) NOT NULL,
-    --total_tasks         INTEGER DEFAULT 0 NOT NULL,
-    --completed_tasks     INTEGER DEFAULT 0 NOT NULL,
     created_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
     updated_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
     category_item_id    INTEGER,

@@ -81,6 +81,7 @@ public class CategoryItemService implements ICategoryItemService {
                 List<FinalFlashcard> flashcards = flashcardRepository.findAllByCategoryItemId(id);
 
                 List<FlashcardDTO> flashcardDTOs = flashcards.stream().map(flashcard -> new FlashcardDTO(
+                        flashcard.getId(),
                         flashcard.getQuestion(),
                         flashcard.getAnswer()
                 ))

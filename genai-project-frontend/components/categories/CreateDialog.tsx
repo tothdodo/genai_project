@@ -58,6 +58,15 @@ export function CreateDialog({
             setName("");
             setDescription("");
             onOpenChange(false);
+        } catch (error) {
+            if (error instanceof Response && error.status === 400) {
+                console.error("Error 400: Bad request.");
+                alert(`There is already a ${objectName.toLowerCase()} with this name.`);
+                return;
+            } else {
+                alert("An error occurred while creating. Please try again.");
+                console.error("Error creating:", error);
+            }
         } finally {
             setCreating(false);
         }

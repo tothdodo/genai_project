@@ -20,9 +20,6 @@ public class StartAggregationJobDto {
     @JsonProperty("category_item_id")
     private Integer categoryItemId;
 
-    @JsonProperty("file_id")
-    private Long fileId;
-
     @JsonProperty("summaries")
     private List<String> summaries;
 

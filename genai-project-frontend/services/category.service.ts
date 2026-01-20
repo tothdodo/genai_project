@@ -19,7 +19,6 @@ export async function getCategoryById(categoryId: number): Promise<Category> {
     }
 
     const data: Category = await res.json();
-    console.log(data)
     return data;
 }
 

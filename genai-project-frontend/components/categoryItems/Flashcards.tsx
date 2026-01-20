@@ -3,13 +3,11 @@
 import { useCategoryItem } from "@/contexts/CategoryItemContext";
 import React from "react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "../ui/collapsible";
-import { BookOpen, ChevronDown, Eye, EyeOff, LayoutGrid, Shuffle } from "lucide-react";
+import { ChevronDown, Eye, EyeOff, LayoutGrid, Shuffle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Flashcard } from "@/types/categoryItem";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "../ui/card";
-import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
 import { Separator } from "@radix-ui/react-separator";
 
 export default function Flashcards() {
@@ -54,7 +52,7 @@ function FlashcardGrid(
     const [revealedIds, setRevealedIds] = React.useState<number[]>([]);
     const [version, setVersion] = React.useState(0);
 
-    const showAll = () => setRevealedIds(cards.map(c => c.orderId));
+    const showAll = () => setRevealedIds(cards.map(c => c.id));
 
     const hideAll = () => setRevealedIds([]);
 
@@ -105,10 +103,10 @@ function FlashcardGrid(
                 {cards
                     .map((card) => (
                         <FlashcardItem
-                            key={card.orderId}
+                            key={card.id}
                             flashcard={card}
-                            isRevealed={revealedIds.includes(card.orderId)}
-                            onToggle={() => toggleCard(card.orderId)}
+                            isRevealed={revealedIds.includes(card.id)}
+                            onToggle={() => toggleCard(card.id)}
                         />
                     ))}
             </div>

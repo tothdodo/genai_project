@@ -19,8 +19,8 @@ You are an expert summarizer.
 Below is a list of partial summaries extracted from a document. 
 Your task is to combine them into one cohesive, comprehensive, and well-structured final summary.
 Ensure the flow is logical and avoid redundancy.
-IMPORTANT: The text may contain LaTeX formatting. You must escape all backslashes in your JSON output (e.g., write "\\pi" instead of "\pi").
-Do not include markdown formatting (like ```json). Just return the raw JSON string.
+IMPORTANT: The text may contain LaTeX formatting.
+IMPORTANT: Return the output in a markdown formatted string.
 
 {feedback}
 
