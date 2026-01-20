@@ -10,6 +10,7 @@ import genai.genaiprojectbackend.model.enums.JobType;
 import genai.genaiprojectbackend.repository.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -121,7 +122,7 @@ public class WorkerResultService {
 
         Optional<TextChunk> textChunkOpt = textChunkRepository.findByFile_IdAndChunkIndex(job.getFileId(), chunkNumber);
 
-        if (textChunkOpt.isPresent()) {
+        if (textChunkOpt.isPresent() && StringUtils.hasText(summaryText)) {
             // 1. Save the Summary
             SummaryChunk summaryChunk = new SummaryChunk(textChunkOpt.get(), summaryText);
             summaryChunk = summaryChunkRepository.save(summaryChunk);
@@ -146,8 +147,7 @@ public class WorkerResultService {
             workerStartService.startFlashcardGenerationJob(startDto);
 
         } else {
-            job.setStatus(JobStatus.FAILED);
-            jobRepository.save(job);
+            handleJobFailure(job);
         }
     }
 
@@ -163,8 +163,7 @@ public class WorkerResultService {
         Optional<SummaryChunk> summaryChunkOpt = summaryChunkRepository.findById(summaryChunkId);
 
         if (summaryChunkOpt.isEmpty()) {
-            job.setStatus(JobStatus.FAILED);
-            jobRepository.save(job);
+            handleJobFailure(job);
             return;
         }
 
@@ -244,8 +243,7 @@ public class WorkerResultService {
         String finalSummaryText = (String) payload.get("final_summary");
 
         if (job.getCategoryItemId() == null) {
-            job.setStatus(JobStatus.FAILED);
-            jobRepository.save(job);
+            handleJobFailure(job);
             return;
         }
 
@@ -288,12 +286,52 @@ public class WorkerResultService {
             categoryItem.setStatus(CategoryItemStatus.COMPLETED);
             categoryItemRepository.save(categoryItem);
         } else {
-            job.setStatus(JobStatus.FAILED);
-            jobRepository.save(job);
+            // Handle logical failure (CategoryItem not found)
+            handleJobFailure(job);
         }
     }
 
-    // Helper methods to handle inconsistent map keys if necessary
+    // --- Helper Methods ---
+
+    /**
+     * Handles job failure by updating statuses and cleaning up all temporary data
+     * (Flashcards, SummaryChunks, TextChunks) for the associated CategoryItem.
+     */
+    private void handleJobFailure(Job job) {
+        job.setStatus(JobStatus.FAILED);
+        jobRepository.save(job);
+
+        Integer categoryItemId = job.getCategoryItemId();
+        if (categoryItemId != null) {
+            Optional<CategoryItem> categoryItemOpt = categoryItemRepository.findById(categoryItemId);
+            if (categoryItemOpt.isPresent()) {
+                CategoryItem categoryItem = categoryItemOpt.get();
+
+                categoryItem.setStatus(CategoryItemStatus.FAILED);
+                categoryItemRepository.save(categoryItem);
+
+                cleanupFailedCategoryData(categoryItemId);
+            }
+        }
+    }
+
+    private void cleanupFailedCategoryData(Integer categoryItemId) {
+        List<TemporaryFlashcard> tempFlashcards = temporaryFlashcardRepository.findAllBySummaryChunk_TextChunk_File_CategoryItem_Id(categoryItemId);
+        if (!tempFlashcards.isEmpty()) {
+            temporaryFlashcardRepository.deleteAll(tempFlashcards);
+        }
+
+        List<SummaryChunk> summaryChunks = summaryChunkRepository.findAllByTextChunk_File_CategoryItem_Id(categoryItemId);
+        if (!summaryChunks.isEmpty()) {
+            summaryChunkRepository.deleteAll(summaryChunks);
+        }
+
+        List<TextChunk> textChunks = textChunkRepository.findAllByCategoryItem_Id(categoryItemId);
+        if (!textChunks.isEmpty()) {
+            textChunkRepository.deleteAll(textChunks);
+        }
+    }
+
     private Integer getJobId(Map<String, Object> result) {
         if (result.get("original_job_id") != null) {
             return (Integer) result.get("original_job_id");
@@ -321,8 +359,7 @@ public class WorkerResultService {
             return true;
         }
 
-        job.setStatus(JobStatus.FAILED);
-        jobRepository.save(job);
+        handleJobFailure(job);
         return false;
     }
 }

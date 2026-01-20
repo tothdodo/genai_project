@@ -1,6 +1,6 @@
 schema = {
     "type": "object",
-    "required": ["job_id", "category_item_id", "file_id", "summaries", "flashcards"],
+    "required": ["job_id", "category_item_id", "summaries", "flashcards"],
     "properties": {
         "job_id": {
             "type": "integer",
