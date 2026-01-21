@@ -1,0 +1,212 @@
+name: genai-project
+
+services:
+  frontend:
+    container_name: nextjs-frontend
+    build:
+      context: ./genai-project-frontend
+      dockerfile: Dockerfile
+      args:
+        - NEXT_PUBLIC_CLIENT_BACKEND_URI=http://localhost:8080
+        - NEXT_PUBLIC_FRONTEND_URI=http://localhost:3000
+    environment:
+      - NEXT_PUBLIC_SERVER_BACKEND_URI=http://backend:8080
+    ports:
+      - "3000:3000"
+    networks:
+      - genai-network
+
+  backend:
+    container_name: spring-backend
+    build:
+      context: ./genai-project-backend
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      - POSTGRES_HOST=postgres
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_DEFAULT_USER=admin
+      - RABBITMQ_DEFAULT_PASS=admin
+      - APP_UPLOAD_DIR=/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+        restart: true
+      rabbitmq:
+        condition: service_started
+        restart: true
+    healthcheck:
+      test: "curl --fail --silent localhost:8080/actuator/health | grep UP || exit 1"
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+    networks:
+      - genai-network
+
+  minio:
+    image: quay.io/minio/minio:latest
+    container_name: genai-minio
+    restart: unless-stopped
+    ports:
+      - "9000:9000" # API port
+      - "9001:9001" # Console port
+    environment:
+      MINIO_ROOT_USER: admin
+      MINIO_ROOT_PASSWORD: genaiWS25
+    volumes:
+      - ./data/minio:/data
+    command: server /data --console-address ":9001"
+
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:9000/minio/health/ready" ]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+    networks:
+      - genai-network
+
+  minio-init:
+    image: quay.io/minio/mc:latest
+    container_name: genai-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c " mc alias set myminio http://minio:9000 admin genaiWS25 && mc mb myminio/basebucket || true "
+    networks:
+      - genai-network
+    restart: "no"
+
+  flashcard-generation-worker:
+    image: flashcard-generation-genai-worker
+    build:
+      context: ./genai-project-worker
+      dockerfile: Dockerfile-flashcard-generation-worker
+    deploy:
+      replicas: 4
+    environment:
+      - RABBITMQ_PREFETCH=1
+    env_file:
+      - .env
+    depends_on:
+      minio:
+        condition: service_started
+        restart: true
+      rabbitmq:
+        condition: service_started
+        restart: true
+      postgres:
+        condition: service_started
+        restart: true
+    networks:
+      - genai-network
+
+  summary-generation-worker:
+    image: summary-generation-genai-worker
+    build:
+      context: ./genai-project-worker
+      dockerfile: Dockerfile-summary-generation-worker
+    deploy:
+      replicas: 4
+    environment:
+      - RABBITMQ_PREFETCH=1
+    env_file:
+      - .env
+    depends_on:
+      minio:
+        condition: service_started
+        restart: true
+      rabbitmq:
+        condition: service_started
+        restart: true
+      postgres:
+        condition: service_started
+        restart: true
+    networks:
+      - genai-network
+
+  text-extraction-worker:
+    image: text-extraction-genai-worker
+    build:
+      context: ./genai-project-worker
+      dockerfile: Dockerfile-text-extraction-worker
+    container_name: text-extraction-worker
+    volumes:
+      - "./data/text_extraction_worker:/data/text_chunks"
+    env_file:
+      - .env
+    depends_on:
+      minio:
+        condition: service_started
+        restart: true
+      rabbitmq:
+        condition: service_started
+        restart: true
+      postgres:
+        condition: service_started
+        restart: true
+    networks:
+      - genai-network
+
+  aggregation-worker:
+    image: aggregation-genai-worker
+    build:
+      context: ./genai-project-worker
+      dockerfile: Dockerfile-aggregation-worker
+    container_name: aggregation-worker
+    env_file:
+      - .env
+    depends_on:
+      minio:
+        condition: service_started
+        restart: true
+      rabbitmq:
+        condition: service_started
+        restart: true
+      postgres:
+        condition: service_started
+        restart: true
+    networks:
+      - genai-network
+
+  postgres:
+    build:
+      context: ./postgres
+      dockerfile: Dockerfile
+    container_name: genai-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U admin" ]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+    networks:
+      - genai-network
+
+  rabbitmq:
+    build:
+      context: ./rabbitmq
+      dockerfile: Dockerfile
+    container_name: genai-rabbitmq
+    restart: unless-stopped
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    networks:
+      - genai-network
+
+networks:
+  genai-network:
+    driver: bridge
