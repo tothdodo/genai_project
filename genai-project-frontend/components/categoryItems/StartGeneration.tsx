@@ -7,7 +7,7 @@ import { startGeneration } from "@/services/categoryItem.service";
 import { useCategoryItem } from "@/contexts/CategoryItemContext";
 
 export default function StartGeneration({ disabled }: { disabled: boolean }) {
-    const { categoryItem, updateStatus } = useCategoryItem();
+    const { categoryItem, updateCategoryItem } = useCategoryItem();
     const [dialogOpen, setDialogOpen] = React.useState(false);
     const [loading, setLoading] = React.useState(false);
     const [error, setError] = React.useState<string | null>(null);
@@ -18,7 +18,7 @@ export default function StartGeneration({ disabled }: { disabled: boolean }) {
             setLoading(true);
             // API call to start generation with categoryItemId
             await startGeneration(categoryItem.id);
-            updateStatus("PROCESSING");
+            updateCategoryItem("status", "PROCESSING");
         } catch (error) {
             console.error("Error starting generation:", error);
             setError("Failed to start generation. Please try again.");

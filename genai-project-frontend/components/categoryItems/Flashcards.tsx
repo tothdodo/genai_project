@@ -11,7 +11,7 @@ import { Button } from "../ui/button";
 import { Separator } from "@radix-ui/react-separator";
 
 export default function Flashcards() {
-    const [flashcardsOpen, setFlashcardsOpen] = React.useState(false);
+    const [flashcardsOpen, setFlashcardsOpen] = React.useState(true);
     const { categoryItem, status } = useCategoryItem();
 
     return (

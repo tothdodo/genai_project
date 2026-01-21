@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 import ContentParser from "./ContentParser";
 
 export default function Summary() {
-    const [summaryOpen, setSummaryOpen] = React.useState(false);
+    const [summaryOpen, setSummaryOpen] = React.useState(true);
     const { categoryItem, status } = useCategoryItem();
 
     return (

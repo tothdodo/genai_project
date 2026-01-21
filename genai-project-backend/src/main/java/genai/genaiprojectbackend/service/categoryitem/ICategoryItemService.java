@@ -1,8 +1,6 @@
 package genai.genaiprojectbackend.service.categoryitem;
 
-import genai.genaiprojectbackend.api.categoryitem.dtos.CategoryItemDTO;
-import genai.genaiprojectbackend.api.categoryitem.dtos.CategoryItemDetailsDTO;
-import genai.genaiprojectbackend.api.categoryitem.dtos.CreateCategoryItemDTO;
+import genai.genaiprojectbackend.api.categoryitem.dtos.*;
 
 import java.util.List;
 
@@ -17,5 +15,7 @@ public interface ICategoryItemService {
 
     void startGeneration(Integer id);
 
-    String getStatusById(Integer id);
+    StatusInfo getStatusById(Integer id);
+
+    Generation getGenerationById(Integer id);
 }

@@ -6,8 +6,7 @@ import React, { createContext, useContext, useState, ReactNode } from "react";
 interface CategoryItemContextType {
     categoryItem: CategoryItemDetails;
     status: string;
-    updateStatus: (newStatus: string) => void;
-    // You can add more update functions here later (e.g., updateSummary)
+    updateCategoryItem: <K extends keyof CategoryItemDetails>(key: K, value: CategoryItemDetails[K]) => void;
 }
 
 const CategoryItemContext = createContext<CategoryItemContextType | undefined>(undefined);
@@ -21,12 +20,18 @@ export function CategoryItemProvider({
 }) {
     const [categoryItem, setCategoryItem] = useState(initialItem);
 
-    const updateStatus = (newStatus: string) => {
-        setCategoryItem((prev) => ({ ...prev, status: newStatus }));
+    const updateCategoryItem = <K extends keyof CategoryItemDetails>(
+        key: K,
+        value: CategoryItemDetails[K]
+    ) => {
+        setCategoryItem((prev) => {
+            if (!prev) return prev;
+            return { ...prev, [key]: value };
+        });
     };
 
     return (
-        <CategoryItemContext.Provider value={{ categoryItem, status: categoryItem.status, updateStatus }}>
+        <CategoryItemContext.Provider value={{ categoryItem, updateCategoryItem, status: categoryItem.status }}>
             {children}
         </CategoryItemContext.Provider>
     );

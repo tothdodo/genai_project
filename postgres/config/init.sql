@@ -23,12 +23,13 @@ CREATE TABLE IF NOT EXISTS categories (
     );
 
 CREATE TABLE IF NOT EXISTS category_items (
-    id              INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
-    name            VARCHAR(32) NOT NULL,
-    description     TEXT,
-    created_at      TIMESTAMP,
-    category_id     INTEGER,
-    status          VARCHAR(16) DEFAULT 'PENDING' CHECK (status in ('PENDING', 'PROCESSING', 'COMPLETED', 'FAILED')),
+    id                     INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+    name                   VARCHAR(32) NOT NULL,
+    description            TEXT,
+    created_at             TIMESTAMP,
+    category_id            INTEGER,
+    status                 VARCHAR(16) DEFAULT 'PENDING' CHECK (status in ('PENDING', 'PROCESSING', 'COMPLETED', 'FAILED')),
+    failed_job_type        VARCHAR(30) CHECK (failed_job_type in ('TEXT_EXTRACTION', 'SUMMARY_GENERATION', 'FLASHCARD_GENERATION', 'AGGREGATION')),
 
     CONSTRAINT fk_category_id
     FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE CASCADE

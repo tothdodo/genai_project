@@ -1,6 +1,7 @@
 package genai.genaiprojectbackend.api.categoryitem.dtos;
 
 import genai.genaiprojectbackend.model.enums.CategoryItemStatus;
+import genai.genaiprojectbackend.model.enums.JobType;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.Setter;
@@ -21,4 +22,5 @@ public class CategoryItemDetailsDTO {
     private List<String> filenames;
     private final String summary;
     private List<FlashcardDTO> flashcards;
+    private final JobType failedJobType;
 }

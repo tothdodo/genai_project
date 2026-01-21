@@ -49,6 +49,8 @@ public class CategoryItemMapper {
                                 categoryHeader,
                                 filenames,
                                 summary,
-                                flashcards);
+                                flashcards,
+                                item.getFailedJobType()
+                        );
         }
 }

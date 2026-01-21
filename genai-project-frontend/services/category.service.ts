@@ -30,18 +30,22 @@ export async function getAllCategories(): Promise<Category[]> {
     const url = `${CLIENT_BACKEND_URI}${DEFAULT_CATEGORY_PATH}/all`;
     console.log("Calling: ", url);
 
-    const res = await fetch(
-        url,
-        params
-    )
+    try {
+        const res = await fetch(
+            url,
+            params
+        )
 
-    if (!res.ok) {
-        throw new Error("Failed to get categories")
+        if (!res.ok) {
+            throw new Error("Failed to get categories")
+        }
+
+        const data: Category[] = await res.json();
+
+        return data;
+    } catch (error) {
+        throw error;
     }
-
-    const data: Category[] = await res.json();
-
-    return data;
 }
 
 export async function addCategory(name: string, description: string | null = null): Promise<Category> {

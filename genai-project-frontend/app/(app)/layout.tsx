@@ -31,16 +31,22 @@ export default function AppLayout({
     const objectName = creationType === CreationType.CATEGORY ? "Category" : "Category Item";
 
     React.useEffect(() => {
-        console.log(process.env.NEXT_PUBLIC_BACKEND_URI);
-        getAllCategories()
-            .then(setCategories)
-            .finally(() => setLoading(false));
+        const fetchCategories = async () => {
+            try {
+                const data = await getAllCategories();
+                setCategories(data);
+            } catch (error) {
+                console.error("Failed to fetch categories:", error);
+                alert("Failed to fetch categories. Please try again later.");
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchCategories();
     }, []);
 
-
-    // Inside your main component:
     const router = useRouter();
-
 
     return (
         <div className="flex min-h-screen w-full">

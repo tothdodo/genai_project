@@ -1,6 +1,7 @@
 package genai.genaiprojectbackend.model.entities;
 
 import genai.genaiprojectbackend.model.enums.CategoryItemStatus;
+import genai.genaiprojectbackend.model.enums.JobType;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -37,6 +38,10 @@ public class CategoryItem {
     @Enumerated(EnumType.STRING)
     @Column(name = "status")
     private CategoryItemStatus status;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "failed_job_type", length = 30)
+    private JobType failedJobType;
 
     @OneToMany(mappedBy = "categoryItem")
     private List<File> files;

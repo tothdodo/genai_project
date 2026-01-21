@@ -308,6 +308,7 @@ public class WorkerResultService {
                 CategoryItem categoryItem = categoryItemOpt.get();
 
                 categoryItem.setStatus(CategoryItemStatus.FAILED);
+                categoryItem.setFailedJobType(job.getJobType());
                 categoryItemRepository.save(categoryItem);
 
                 cleanupFailedCategoryData(categoryItemId);

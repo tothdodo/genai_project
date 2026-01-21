@@ -1,8 +1,6 @@
 package genai.genaiprojectbackend.api.categoryitem;
 
-import genai.genaiprojectbackend.api.categoryitem.dtos.CategoryItemDTO;
-import genai.genaiprojectbackend.api.categoryitem.dtos.CategoryItemDetailsDTO;
-import genai.genaiprojectbackend.api.categoryitem.dtos.CreateCategoryItemDTO;
+import genai.genaiprojectbackend.api.categoryitem.dtos.*;
 import genai.genaiprojectbackend.service.categoryitem.ICategoryItemService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -32,8 +30,8 @@ public class CategoryItemController {
     }
 
     @GetMapping("/{id}/status")
-    public Map<String, String> getStatusById(@PathVariable Integer id) {
-        return Collections.singletonMap("status", service.getStatusById(id));
+    public StatusInfo getStatusById(@PathVariable Integer id) {
+        return service.getStatusById(id);
     }
 
     @DeleteMapping("/{id}")
@@ -46,5 +44,10 @@ public class CategoryItemController {
     @ResponseStatus(HttpStatus.ACCEPTED)
     public void startGeneration(@PathVariable Integer id){
         service.startGeneration(id);
+    }
+
+    @GetMapping("/{id}/generation")
+    public Generation getGenerationById(@PathVariable Integer id) {
+        return service.getGenerationById(id);
     }
 }

@@ -16,6 +16,7 @@ export type CategoryItemDetails = {
     filenames: string[];
     summary: string;
     flashcards: Flashcard[];
+    failedJobType?: string;
 };
 
 export type Summary = {
@@ -36,4 +37,14 @@ export type Flashcard = {
 export type CategoryHeader = {
     id: number;
     name: string;
+}
+
+export type StatusInfo = {
+    status: string;
+    failedJobType?: string;
+}
+
+export type Generation = {
+    summary: string;
+    flashcards: Flashcard[];
 }
