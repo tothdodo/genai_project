@@ -67,11 +67,6 @@ public class WorkerResultService {
             Job job = getValidJobFromResult(result).orElse(null);
             if (job == null || !isResultSuccessful(result, job)) return;
 
-            if (!isJobActive(job)) {
-                log.warn("Backend: Received Text Extraction result for Job {} but status is {}. Ignoring (Zombie Result).", job.getId(), job.getStatus());
-                return;
-            }
-
             job.setStatus(JobStatus.FINISHED);
             jobRepository.save(job);
 
@@ -322,12 +317,7 @@ public class WorkerResultService {
                 }
             }
 
-            temporaryFlashcardRepository.deleteAll(
-                    temporaryFlashcardRepository.findAllBySummaryChunk_TextChunk_File_CategoryItem_Id(categoryItem.getId())
-            );
-            summaryChunkRepository.deleteAll(
-                    summaryChunkRepository.findAllByTextChunk_File_CategoryItem_Id(categoryItem.getId())
-            );
+            cleanupByCategoryItemId(categoryItem.getId());
 
             job.setStatus(JobStatus.FINISHED);
             jobRepository.save(job);
@@ -387,7 +377,7 @@ public class WorkerResultService {
                 );
 
                 log.info("Backend: Broadcast sent (buffered in transaction). Cleaning up data...");
-                cleanupFailedCategoryData(categoryItemId);
+                cleanupByCategoryItemId(categoryItemId);
             } else {
                 log.error("Backend: CategoryItem {} not found in DB.", categoryItemId);
             }
@@ -396,7 +386,7 @@ public class WorkerResultService {
         }
     }
 
-    private void cleanupFailedCategoryData(Integer categoryItemId) {
+    private void cleanupByCategoryItemId(Integer categoryItemId) {
         List<TemporaryFlashcard> tempFlashcards = temporaryFlashcardRepository.findAllBySummaryChunk_TextChunk_File_CategoryItem_Id(categoryItemId);
         if (!tempFlashcards.isEmpty()) {
             temporaryFlashcardRepository.deleteAll(tempFlashcards);
