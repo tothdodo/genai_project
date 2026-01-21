@@ -10,7 +10,6 @@ services:
         - NEXT_PUBLIC_CLIENT_BACKEND_URI=http://localhost:8080
         - NEXT_PUBLIC_FRONTEND_URI=http://localhost:3000
     environment:
-      # SERVER-SIDE: Container uses this to fetch data during SSR
       - NEXT_PUBLIC_SERVER_BACKEND_URI=http://backend:8080
     ports:
       - "3000:3000"
@@ -87,11 +86,9 @@ services:
     build:
       context: ./genai-project-worker
       dockerfile: Dockerfile-flashcard-generation-worker
-    # container_name: flashcard-generation-worker
     deploy:
       replicas: 4
     environment:
-      # CRITICAL: Prevent one worker from hogging all jobs
       - RABBITMQ_PREFETCH=1
     env_file:
       - .env
@@ -113,11 +110,9 @@ services:
     build:
       context: ./genai-project-worker
       dockerfile: Dockerfile-summary-generation-worker
-    # container_name: summary-generation-worker
     deploy:
       replicas: 4
     environment:
-      # CRITICAL: Prevent one worker from hogging all jobs
       - RABBITMQ_PREFETCH=1
     env_file:
       - .env

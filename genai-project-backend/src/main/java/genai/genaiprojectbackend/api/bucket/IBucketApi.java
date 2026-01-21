@@ -79,7 +79,7 @@ public interface IBucketApi {
     ResponseEntity<FileInfoDto> uploadFinished(
             @Parameter(in = ParameterIn.DEFAULT, description = "Signalizes that the upload of a file has finished, changes relevant metadata for that file.", required = true, schema = @Schema())
             @RequestBody FileInfoDto body
-    ); // returns
+    );
 
 
 }

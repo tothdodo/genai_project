@@ -33,10 +33,6 @@ export default function Summary() {
                             <p>Failed to generate summary.</p> :
                             status === "COMPLETED" && categoryItem.summary ?
                                 <>
-                                    {/* <div
-                                        className="prose prose-slate max-w-none"
-                                        dangerouslySetInnerHTML={{ __html: htmlSummary }}
-                                    /> */}
                                     <ContentParser content={categoryItem.summary} />
                                 </> :
                                 <p>No summary available.</p>

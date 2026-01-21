@@ -45,7 +45,7 @@ export async function uploadToPresignedUrl(
     file: File,
     url: string,
     method: string = 'PUT',
-    onProgress?: (percent: number) => void // Add this callback
+    onProgress?: (percent: number) => void
 ): Promise<void> {
     return new Promise((resolve, reject) => {
         const xhr = new XMLHttpRequest();
@@ -55,10 +55,8 @@ export async function uploadToPresignedUrl(
         console.log("Calling: ", proxiedUrl);
         xhr.open(method, proxiedUrl);
 
-        // Set the content type
         xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
 
-        // Monitor progress
         if (onProgress && xhr.upload) {
             xhr.upload.onprogress = (event) => {
                 if (event.lengthComputable) {
@@ -153,9 +151,7 @@ export async function uploadFileUsingPresign(
         throw new Error("Presign request failed: missing presignedURL");
     }
 
-    // Pass the progress callback through
     await uploadToPresignedUrl(file, info.presignedURL, "PUT", onProgress);
 
-    // Optional: Notify backend completion after successful upload
     await notifyUploadComplete(file, hash, timeStampString, categoryItemId);
 }

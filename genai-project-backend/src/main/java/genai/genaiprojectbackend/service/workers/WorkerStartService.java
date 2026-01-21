@@ -21,8 +21,8 @@ public class WorkerStartService {
 
     public void startAggregationJob(StartAggregationJobDto startMetadataJobDto) {
         rabbitTemplate.convertAndSend(
-                RabbitConfig.WORKER_JOB_EXCHANGE,                       // → worker-job
-                RabbitConfig.WORKER_AGGREGATION_START_ROUTING_KEY,     // → worker.metadata.job.start
+                RabbitConfig.WORKER_JOB_EXCHANGE,
+                RabbitConfig.WORKER_AGGREGATION_START_ROUTING_KEY,
                 startMetadataJobDto
         );
     }

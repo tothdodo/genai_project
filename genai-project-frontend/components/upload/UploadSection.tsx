@@ -50,18 +50,16 @@ export default function UploadSection({
             setError("");
             return;
         }
-        // 2. Validate File Type (must be PDF)
         if (selectedFile.type !== "application/pdf") {
             alert("Only PDF files are allowed.");
-            e.target.value = ""; // Clear the input field
+            e.target.value = "";
             return;
         }
 
-        // 3. Validate File Size (Max 50MB)
         const maxSizeInBytes = 50 * 1024 * 1024;
         if (selectedFile.size > maxSizeInBytes) {
             alert("The file is too large. Maximum size allowed is 50MB.");
-            e.target.value = ""; // Clear the input field
+            e.target.value = "";
             return;
         }
 

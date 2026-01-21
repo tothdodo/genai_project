@@ -25,7 +25,6 @@ def __create_connection() -> pika.BlockingConnection:
 def __create_channel(conn: pika.BlockingConnection) -> pika.channel.Channel:
     rabbitConfig = get_rabbitmq_config()
     ch = conn.channel()
-    # Topology gets declared from rabbitmq/definitions.json at startup → NO queue_declare / exchange_declare necessary
     ch.basic_qos(prefetch_count=rabbitConfig.prefetch_count)
     return ch
 

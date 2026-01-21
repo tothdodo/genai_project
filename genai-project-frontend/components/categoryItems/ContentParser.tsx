@@ -104,7 +104,6 @@ const ContentParser = ({ content }: { content: string }) => {
                         );
                     },
 
-                    // --- Blocks & Visuals ---
                     blockquote: ({ children }) => (
                         <Card className="my-6 bg-slate-50 dark:bg-slate-900 border-l-4 border-l-blue-500 italic">
                             <CardContent className="pt-6">

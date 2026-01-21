@@ -33,7 +33,6 @@ public class Url {
     @JoinColumn(name = "file_id", nullable = false)
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     private File file;
-    //TODO fetch correct base bucket from application properties
 
     @Column(name = "s3_bucket")
     private String bucket;

@@ -3,7 +3,6 @@ from dataclasses import dataclass
 
 @dataclass
 class RabbitMQConfig:
-    #if env variable is set, the env var would be returned, otherwise the second (default) value
     host: str = None
     port: int = None
     username: str = None
@@ -11,16 +10,12 @@ class RabbitMQConfig:
     vhost: str = None
     prefetch_count: int = None
 
-    # Topologie-names (have to be correspondent to definitions.json)
-    #
     exchange_worker_job: str = "worker-job"
     exchange_worker_cancellation: str = "worker-cancellation"
-    # (Java --> Python)
     queue_aggregation_job: str = "worker.aggregation.job"
     queue_flashcard_generation_job: str = "worker.flashcard.generation.job"
     queue_summary_generation_job: str = "worker.summary.generation.job"
     queue_text_extraction_job: str = "worker.text.extraction.job"
-    # listener rk for jobs
     routing_aggregation_start: str = "worker.aggregation.job.start"
     routing_flashcard_generation_start: str = "worker.flashcard.generation.job.start"
     routing_summary_generation_start: str = "worker.summary.generation.job.start"
@@ -28,7 +23,6 @@ class RabbitMQConfig:
 
 
     exchange_worker_results: str = "worker-results"
-    # (Python --> Java)
     queue_aggregation_result: str = "worker.aggregation.result"
     queue_flashcard_generation_result: str = "worker.flashcard.generation.result"
     queue_summary_generation_result: str = "worker.summary.generation.result"
@@ -56,5 +50,3 @@ class RabbitMQConfig:
 def get_rabbitmq_config():
     return RabbitMQConfig()
 
-#exported topology --> use "rabbitConfig.*"
-#rabbitConfig = RabbitMQConfig()

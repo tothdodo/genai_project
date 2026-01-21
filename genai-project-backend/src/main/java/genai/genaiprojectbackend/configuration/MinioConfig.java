@@ -13,7 +13,6 @@ public class MinioConfig {
         return MinioClient.builder()
                 .endpoint(props.getEndpoint(), props.getPort(), false)
                 .credentials(props.getUsername(), props.getPassword())
-                //.region("us-east-1")
                 .build();
     }
 

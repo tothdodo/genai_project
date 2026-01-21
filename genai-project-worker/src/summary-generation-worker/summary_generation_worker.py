@@ -59,7 +59,6 @@ def process_req(ch, method, properties, body):
         except (AMQPError, Exception) as ack_e:
             logging.warning(f"Could not ack message: {ack_e}")
 
-    # Helper to publish results (Success or Error)
     def publish_response(msg: BaseMessage):
         publish_response_with_connection(
             msg,

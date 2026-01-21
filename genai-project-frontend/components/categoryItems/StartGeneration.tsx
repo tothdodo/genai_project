@@ -16,7 +16,6 @@ export default function StartGeneration({ disabled }: { disabled: boolean }) {
         setDialogOpen(false);
         try {
             setLoading(true);
-            // API call to start generation with categoryItemId
             await startGeneration(categoryItem.id);
             updateCategoryItem("status", "PROCESSING");
         } catch (error) {

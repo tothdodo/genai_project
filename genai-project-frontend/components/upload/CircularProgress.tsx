@@ -1,5 +1,4 @@
 export function CircularProgress({ value }: { value: number }) {
-    // Radius of 8.5 keeps the 3px stroke within the 20x20 viewBox (10 - 8.5 = 1.5px margin)
     const radius = 8.5;
     const circumference = 2 * Math.PI * radius;
     const offset = circumference - (value / 100) * circumference;

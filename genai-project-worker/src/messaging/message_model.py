@@ -1,15 +1,13 @@
-# worker_python/messaging/message_model.py
 from dataclasses import dataclass
 from typing import Any, Dict
 import json
 import uuid
 from datetime import datetime, timezone
 
-#feel free to change this model as you wish/need
 @dataclass
 class BaseMessage:
-    type: str # could be used to identify the message, with preprocessing, etc
-    status: str # probably unnecessary, can be deleted later on
+    type: str
+    status: str
     job_id: str
     status: str
     payload: Dict[str, Any]
@@ -19,7 +17,7 @@ class BaseMessage:
             "type": self.type,
             "job_id": self.job_id,
             "status": self.status,
-            "payload": self.payload, #TODO payload bei workern abchecken
+            "payload": self.payload,
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }).encode("utf-8")
 

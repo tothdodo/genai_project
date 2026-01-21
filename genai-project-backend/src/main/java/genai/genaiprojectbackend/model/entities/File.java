@@ -48,7 +48,7 @@ public class File {
     private Boolean uploaded;
 
     @Column(name = "uploaded_at", updatable = false)
-    @CreationTimestamp //TODO change this to the actual upload time when implementing uploadFinished
+    @CreationTimestamp
     private Instant uploadedAt;
 
     @ManyToOne(fetch = FetchType.LAZY)

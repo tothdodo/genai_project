@@ -19,26 +19,22 @@ public class CategoryController {
         this.service = service;
     }
 
-    // Create one category
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public CategoryDTO create(@Valid @RequestBody CreateCategoryDTO dto) {
         return service.create(dto);
     }
 
-    // Read one category by ID
     @GetMapping("/{id}")
     public CategoryDTO getById(@PathVariable Integer id) {
         return service.getById(id);
     }
 
-    // Read all categories
     @GetMapping("/all")
     public List<CategoryDTO> getAll() {
         return service.getAll();
     }
 
-    // Delete one category
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(@PathVariable Integer id) {

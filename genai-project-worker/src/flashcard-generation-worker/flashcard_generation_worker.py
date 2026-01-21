@@ -16,7 +16,7 @@ from util.worker_utils import (
     mk_error_msg,
     clean_json_response,
     publish_response_with_connection,
-    start_cancellation_listener  #
+    start_cancellation_listener
 )
 
 FLASHCARD_PROMPT = r"""

@@ -113,7 +113,6 @@ public class CategoryItemService implements ICategoryItemService {
     @Override
     @Transactional
     public void startGeneration(Integer categoryItemId) {
-        // Change CategoryItem Status
         CategoryItem item = itemRepository.findById(categoryItemId)
                 .orElseThrow(() -> new NotFoundException(
                         "Category item not found with id: " + categoryItemId));
@@ -121,20 +120,17 @@ public class CategoryItemService implements ICategoryItemService {
         item.setStatus(CategoryItemStatus.PROCESSING);
         itemRepository.save(item);
 
-        // Get FileIds and Urls for them
         List<WorkerFile> files = fileRepository.findByCategoryItemId(categoryItemId);
 
         if (files.isEmpty()) {
             throw new BadRequestException("No files found for this category item");
         }
 
-        // Create new job
         Job job = new Job(
                 JobType.TEXT_EXTRACTION,
                 categoryItemId);
         Job savedJob = jobRepository.save(job);
 
-        // Start Text Extraction Job
         StartTextExtractionJobDto jobDto = new StartTextExtractionJobDto(
                 savedJob.getId(),
                 categoryItemId,

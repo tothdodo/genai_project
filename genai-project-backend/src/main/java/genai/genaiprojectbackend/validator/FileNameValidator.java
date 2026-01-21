@@ -10,10 +10,7 @@ public class FileNameValidator implements ConstraintValidator<FileNameValid, Str
 
     @Override
     public boolean isValid(String s, ConstraintValidatorContext constraintValidatorContext) {
-        //String pattern = ""; // Example pattern: only allows alphanumeric characters, dots, underscores, and hyphens
-        //RegexValidator regexValidator = new RegexValidator(pattern);
-        //TODO add more fileName validation like only allowing laz for example when we decide on that
-        return true; //regexValidator.isValid(s);
+        return true;
     }
 
     @Override

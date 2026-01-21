@@ -27,7 +27,6 @@ export async function getCategoryItemById(categoryItemId: number): Promise<Categ
     const params: RequestInit = {
         method: "GET",
         headers: HEADERS,
-        // This prevents Next.js from caching the response in the Data Cache
         cache: "no-store",
     };
 

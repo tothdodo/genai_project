@@ -27,12 +27,11 @@ def minio_client():
         logging.warning("MINIO_ACCESS_KEY or MINIO_SECRET_KEY not set!")
         raise EnvironmentError("MINIO_ACCESS_KEY or MINIO_SECRET_KEY not set!")
 
-    # Reads from the env vars defined in your .env file
     client = Minio(
         endpoint_url,
         access_key,
         secret_key,
-        secure=False  # Set to True if using SSL/TLS
+        secure=False
     )
     return client
 
@@ -140,7 +139,6 @@ def download_file_to_memory(url: str) -> io.BytesIO:
     try:
         with session.get(url, stream=True) as r:
             r.raise_for_status()
-            # Read the entire content into an in-memory byte buffer
             return io.BytesIO(r.content)
     except Exception as e:
         raise RuntimeError(f"Download failed for {url}: {e}") from e

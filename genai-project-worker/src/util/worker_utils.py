@@ -77,11 +77,8 @@ def start_cancellation_listener(cancelled_categories: Set[str]):
     def run_listener():
         while True:
             try:
-                # Create a dedicated connection for this thread
                 channel = create_rabbit_con_and_return_channel()
 
-                # Ensure exchange exists (fanout)
-                # Fallback string provided in case config isn't updated yet, but config update is recommended
                 exchange_name = getattr(rabbitConfig, 'exchange_worker_cancellation', 'worker-cancellation')
                 channel.exchange_declare(
                     exchange=exchange_name,
@@ -89,11 +86,9 @@ def start_cancellation_listener(cancelled_categories: Set[str]):
                     durable=True
                 )
 
-                # Create a temporary, exclusive queue for this worker instance
                 result = channel.queue_declare(queue='', exclusive=True)
                 queue_name = result.method.queue
 
-                # Bind to the fanout exchange
                 channel.queue_bind(exchange=exchange_name, queue=queue_name)
 
                 def on_cancel_message(ch, method, properties, body):
@@ -114,6 +109,5 @@ def start_cancellation_listener(cancelled_categories: Set[str]):
                 logging.error(f"Cancellation listener connection lost: {e}. Retrying in 5s...")
                 time.sleep(5)
 
-    # Start as daemon thread so it closes when the main process exits
     listener_thread = threading.Thread(target=run_listener, daemon=True)
     listener_thread.start()

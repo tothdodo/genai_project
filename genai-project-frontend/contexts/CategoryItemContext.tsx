@@ -37,7 +37,6 @@ export function CategoryItemProvider({
     );
 }
 
-// Custom hook for easy access in children
 export function useCategoryItem() {
     const context = useContext(CategoryItemContext);
     if (!context) {

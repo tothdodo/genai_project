@@ -19,7 +19,6 @@ export default function UploadGenerationSection() {
     const [fileIsUploading, setFileIsUploading] = React.useState(false);
 
     const [files, setFiles] = useState<MaterialFile[]>(() => {
-        // 1. Transform the props as before
         return categoryItem.filenames.map((fileName) => ({
             fileName: fileName,
             type: fileName.split(".").pop() || "unknown",

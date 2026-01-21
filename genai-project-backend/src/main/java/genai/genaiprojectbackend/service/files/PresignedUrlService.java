@@ -44,16 +44,13 @@ public class PresignedUrlService implements IPresignedUrlService {
     private final FileRepository fileRepository;
     private final CategoryItemRepository categoryItemRepository;
     private final UrlMapper urlMapper;
-    // minimum added time to the current time when checking for expiry
     private final int minimumAddedTime = 20;
     @Value("${spring.rabbitmq.template.routing-key:metadata_trigger}")
     private String routingKey;
 
-    @Scheduled(fixedDelayString = "${minio.defaultRefresh:2000}") // this needs to be less than the url expiry time
-    // default 10 min, always needs to be less than the url validity
+    @Scheduled(fixedDelayString = "${minio.defaultRefresh:2000}")
     @Transactional
     public void invalidateUrls() {
-        // Try to refresh and recover silently on errors so scheduler keeps running
         urlRepository.getUrlsByExpiresAtBefore(Instant.now()).forEach(url -> {
             log.info("Deleting expired URL for file: {}",
                     url.getFile() != null ? url.getFile().getFilename() : "unknown");
@@ -64,9 +61,7 @@ public class PresignedUrlService implements IPresignedUrlService {
 
     @PostConstruct
     public void init() throws MinioException, GeneralSecurityException, IOException {
-        // store a base file if it doesn't already exist
         if (IPresignedUrlService.bucketExists(minioClient, minioProperties.getBucket()).join()) {
-            // Bucket exists
             log.info("Bucket {} exists and is reachable", minioProperties.getBucket());
         } else {
             throw new MinioException("Bucket does not exist: " + minioProperties.getBucket());
@@ -87,7 +82,6 @@ public class PresignedUrlService implements IPresignedUrlService {
         if (presignedObjectUrlArgs == null) {
             return Optional.empty();
         }
-        // expiry should be set before fetching url
         Instant expiresAt = Instant.now().plusSeconds(minioProperties.getDefaultExpiryTime());
         Optional<FileInfoDto> fileInfo = getUrl(presignedObjectUrlArgs, fileName, originalFileName);
 
@@ -108,7 +102,6 @@ public class PresignedUrlService implements IPresignedUrlService {
 
             return Optional.of(fileInfoDtoActual);
         } else {
-            // refactor
             return Optional.empty();
         }
     }
@@ -119,7 +112,6 @@ public class PresignedUrlService implements IPresignedUrlService {
         if (presignedObjectUrlArgs == null) {
             return Optional.empty();
         }
-        // check if the file already exists if not return empty
         if (fileRepository.findFileByFilenameAndUploaded(fileName, true).isPresent()) {
             return Optional.empty();
         }
@@ -129,8 +121,6 @@ public class PresignedUrlService implements IPresignedUrlService {
         Optional<File> fileOpt = fileRepository.findFileByFilenameAndUploaded(fileName, false);
         File file;
         if (fileOpt.isPresent()) {
-            // file already exists but not yet uploaded
-            // check whether there is a valid upload url
             List<Url> presignedUrls = urlRepository.findByFile_Filename_AndMethod_AndExpiresAtAfter(fileName,
                     Method.PUT, Instant.now());
             Optional<Url> createdUpload = presignedUrls.stream().findAny();
@@ -191,7 +181,6 @@ public class PresignedUrlService implements IPresignedUrlService {
         if (presignedObjectUrlArgs == null) {
             return Optional.empty();
         }
-        // expiry should be set before fetching url
         Instant expiresAt = Instant.now().plusSeconds(minioProperties.getDefaultExpiryTime());
         Optional<FileInfoDto> fileInfoOpt = getUrl(presignedObjectUrlArgs, body.getFileName(),
                 body.getOriginalFileName());
