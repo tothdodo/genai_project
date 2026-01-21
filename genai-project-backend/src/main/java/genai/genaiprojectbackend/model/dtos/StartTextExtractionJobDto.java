@@ -5,8 +5,6 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.Setter;
 
-import java.util.List;
-
 @Getter
 @Setter
 @AllArgsConstructor
@@ -14,5 +12,5 @@ import java.util.List;
 public class StartTextExtractionJobDto {
     private final Integer jobId;
     private final Integer categoryItemId;
-    private final List<WorkerFile> files;
+    private final WorkerFile file; // Changed from List<WorkerFile> to single WorkerFile
 }

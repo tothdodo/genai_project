@@ -67,6 +67,11 @@ public class WorkerResultService {
             Job job = getValidJobFromResult(result).orElse(null);
             if (job == null || !isResultSuccessful(result, job)) return;
 
+            if (!isJobActive(job)) {
+                log.warn("Backend: Received Summary result for Job {} but status is {}. Ignoring (Zombie Result).", job.getId(), job.getStatus());
+                return;
+            }
+
             job.setStatus(JobStatus.FINISHED);
             jobRepository.save(job);
 

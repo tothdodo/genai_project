@@ -1,6 +1,6 @@
 schema = {
     "type": "object",
-    "required": ["jobId", "categoryItemId"],
+    "required": ["jobId", "categoryItemId", "file"],
     "properties": {
         "jobId": {
             "type": "number"
@@ -8,26 +8,21 @@ schema = {
         "categoryItemId": {
             "type": "number"
         },
-        "files": {
-            "type": "array",
-            "minItems": 1,
-            "items": {
-                "type": "object",
-                "required": ["id", "url"],
-                "properties": {
-                    "id": {
-                        "type": "number",
-                        "minLength": 1
-                    },
-                    "url": {
-                        "type": "string",
-                        "minLength": 1
-                    }
+        "file": {
+            "type": "object",
+            "required": ["id", "url"],
+            "properties": {
+                "id": {
+                    "type": "number",
+                    "minLength": 1
                 },
-                "additionalProperties": False
-            }
+                "url": {
+                    "type": "string",
+                    "minLength": 1
+                }
+            },
+            "additionalProperties": False
         }
-
     },
     "additionalProperties": False
 }

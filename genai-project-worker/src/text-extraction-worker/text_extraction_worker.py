@@ -133,58 +133,60 @@ def process_req(ch, method, properties, body):
         logging.info(f"Start time: {start_time}")
         logging.info("Received request: {}".format(request))
 
-        files_list = request.get("files", [])
+        file_entry = request.get("file")
         category_item_id = str(request.get("categoryItemId", "unknown_category"))
 
         if category_item_id in cancelled_categories:
             logging.info(f"Skipping job {job_id} because category {category_item_id} is cancelled.")
             return
 
-        for file_entry in files_list:
-            if category_item_id in cancelled_categories:
-                logging.info("Aborting processing...")
+        if not file_entry:
+            logging.warning("Job received without a file entry.")
+            publish_response(mk_error_msg(job_id, "No file provided in request"))
+            return
+
+        file_url = file_entry.get("url")
+        file_id = str(file_entry.get("id", "unknown_file"))
+
+        if not file_url:
+            logging.warning("Skipping entry with no URL.")
+            publish_response(mk_error_msg(job_id, "File URL is missing"))
+            return
+
+        try:
+            local_file = file_handler.download_file_to_memory(file_url)
+
+            if not local_file:
+                logging.warning(f"File at {file_url} is empty.")
+                publish_response(mk_error_msg(job_id, "Downloaded file is empty"))
                 return
 
-            file_url = file_entry.get("url")
-            file_id = str(file_entry.get("id", "unknown_file"))
+            text_chunks, images = extract_pdf_content(local_file)
 
-            if not file_url:
-                logging.warning("Skipping an entry with no URL.")
-                continue
+            target_folder = BASE_DIR / str(category_item_id) / str(file_id)
 
-            try:
-                local_file = file_handler.download_file_to_memory(file_url)
+            target_folder.mkdir(parents=True, exist_ok=True)
 
-                if not local_file:
-                    logging.warning(f"File at {file_url} is empty, skipping.")
-                    continue
+            for index, chunk in enumerate(text_chunks):
+                file_path = target_folder / f"chunk_{index}.txt"
 
-                text_chunks, images = extract_pdf_content(local_file)
+                with open(file_path.absolute(), "w", encoding="utf-8") as f:
+                    f.write(chunk)
 
-                target_folder = BASE_DIR / str(category_item_id) / str(file_id)
+            logging.info(f"Saved {len(text_chunks)} chunks to {target_folder.absolute()}")
 
-                target_folder.mkdir(parents=True, exist_ok=True)
-
-                for index, chunk in enumerate(text_chunks):
-                    file_path = target_folder / f"chunk_{index}.txt"
-
-                    with open(file_path.absolute(), "w", encoding="utf-8") as f:
-                        f.write(chunk)
-
-                logging.info(f"Saved {len(text_chunks)} chunks to {target_folder.absolute()}")
-
-                publish_response(BaseMessage(type="text_extraction", job_id=job_id, status="success",
-                                             payload={
-                                                 "textChunks": text_chunks,
-                                                 "fileId": file_id,
-                                                 "categoryItemId": category_item_id,
-                                                 "pageStart": 0,
-                                                 "pageEnd": 0
-                                             }))
-            except HTTPError as e:
-                logging.warning("Couldn't download file from: {}, error: {}".format(file_url, e))
-                publish_response(mk_error_msg(job_id, f"Error downloading {file_url}: {e}"))
-                continue
+            publish_response(BaseMessage(type="text_extraction", job_id=job_id, status="success",
+                                            payload={
+                                                "textChunks": text_chunks,
+                                                "fileId": file_id,
+                                                "categoryItemId": category_item_id,
+                                                "pageStart": 0,
+                                                "pageEnd": 0
+                                            }))
+        except HTTPError as e:
+            logging.warning("Couldn't download file from: {}, error: {}".format(file_url, e))
+            publish_response(mk_error_msg(job_id, f"Error downloading {file_url}: {e}"))
+            return
 
     except Exception as e:
         logging.error(f"Failed to process message: {e}")

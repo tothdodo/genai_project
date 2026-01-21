@@ -10,14 +10,12 @@ import genai.genaiprojectbackend.model.entities.*;
 import genai.genaiprojectbackend.model.enums.CategoryItemStatus;
 import genai.genaiprojectbackend.model.enums.JobType;
 import genai.genaiprojectbackend.repository.*;
-import genai.genaiprojectbackend.repository.projection.StatusOnly;
 import genai.genaiprojectbackend.service.workers.WorkerStartService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 
 @Service
 @Transactional
@@ -126,16 +124,22 @@ public class CategoryItemService implements ICategoryItemService {
             throw new BadRequestException("No files found for this category item");
         }
 
-        Job job = new Job(
-                JobType.TEXT_EXTRACTION,
-                categoryItemId);
-        Job savedJob = jobRepository.save(job);
+        // Loop through each file to create and start a separate job
+        for (WorkerFile file : files) {
+            Job job = new Job(
+                    JobType.TEXT_EXTRACTION,
+                    categoryItemId);
+            Job savedJob = jobRepository.save(job);
 
-        StartTextExtractionJobDto jobDto = new StartTextExtractionJobDto(
-                savedJob.getId(),
-                categoryItemId,
-                files);
-        workerStartService.startTextExtractionJob(jobDto);
+            // Create DTO with a singleton list containing only the current file
+            StartTextExtractionJobDto jobDto = new StartTextExtractionJobDto(
+                    savedJob.getId(),
+                    categoryItemId,
+                    file
+            );
+
+            workerStartService.startTextExtractionJob(jobDto);
+        }
     }
 
     @Override
