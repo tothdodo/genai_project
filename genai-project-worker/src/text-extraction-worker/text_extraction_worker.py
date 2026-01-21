@@ -60,7 +60,7 @@ def mk_success_msg(job_id: str, payload: dict):
 
 def chunk_text(text):
     chunks = []
-    separators = ["\n\n", "\n", ". ", " "]
+    separators = ["\n\n", "\n", ". ", "? ", "! "]
 
     current_pos = 0
     text_len = len(text)
